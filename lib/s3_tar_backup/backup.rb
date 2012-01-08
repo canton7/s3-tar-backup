@@ -30,7 +30,7 @@ module S3TarBackup
 		def archive
 			return @archive if @archive
 			type = snar_exists? ? 'incr' : 'full'
-			File.join(@backup_dir, "backup-#{@name}.#{@time.strftime('%Y%m%d_%H%M%S')}-#{type}.tar.bz2")
+			File.join(@backup_dir, "backup-#{@name}.#{@time.strftime('%Y%m%d_%H%M%S')}.#{type}.tar.bz2")
 		end
 
 		def backup_cmd
@@ -40,10 +40,15 @@ module S3TarBackup
 			"tar cjf \"#{@archive}\" -g \"#{snar_path}\" --exclude #{exclude} --no-check-device #{sources}"
 		end
 
-		def backup
-
+		def self.parse_name(name, profile)
+			match = name.match(/^backup-([^\.]+)\.(\d\d\d\d)(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)\.([^\.]+)\.tar.bz2$/)
+			return nil unless match && match[1] == profile
+			return {
+				:type => match[8].to_sym,
+				:date => Time.new(match[2].to_i, match[3].to_i, match[4].to_i, match[5].to_i, match[6].to_i, match[7].to_i),
+				:name => name,
+			}
 		end
-
 
 	end
 end

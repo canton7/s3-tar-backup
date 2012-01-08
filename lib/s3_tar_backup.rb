@@ -2,6 +2,7 @@ require 'aws/s3'
 require 'trollop'
 require 's3_tar_backup/ini_parser'
 require 's3_tar_backup/backup'
+require 'pp'
 include AWS
 
 module S3TarBackup
@@ -20,11 +21,13 @@ module S3TarBackup
 		config = IniParser.new(opts[:config]).load
 		self.connect_s3(config['settings.aws_access_key_id'], config['settings.aws_secret_access_key'])
 
-		if opts[:backup]
-			self.backup_incr(self.gen_backup_config(opts[:profile], config))
-		elsif opts[:full_backup]
-			self.backup_full(self.gen_backup_config(opts[:profile], config))
+		prev_backups = self.parse_objects('creek-backups', 'tar_test/', opts[:profile])
+
+		if opts[:backup] || opts[:full_backup]
+			self.perform_backup(opts, config, prev_backups)
 		end
+
+		self.perform_cleanup(opts, config, prev_backups)
 	end
 
 	def connect_s3(access_key, secret_key)
@@ -33,6 +36,43 @@ module S3TarBackup
 			:secret_access_key => secret_key,
 		})
 		S3::DEFAULT_HOST.replace("s3-eu-west-1.amazonaws.com")
+	end
+
+	def perform_backup(opts, config, prev_backups)
+		full_required = self.full_required?(config["settings.full_if_older_than"], prev_backups)
+		puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full_backup]
+		if full_required || opts[:full_backup]
+			self.backup_full(self.gen_backup_config(opts[:profile], config))
+		elsif opts[:backup]
+			self.backup_incr(self.gen_backup_config(opts[:profile], config))
+		end
+	end
+
+	def perform_cleanup(opts, config, prev_backups)
+		remove = []
+		if age_str = config.get("settings.remove_older_than", false)
+			age = self.parse_interval(age_str)
+			remove = prev_backups.select{ |o| o[:date] < age }
+			# Don't want to delete anything before the last full backup
+			removed = remove.slice!(remove.rindex{ |o| o[:type] == :full }..-1).count
+			puts "Keeping #{removed} old backups as part of a chain"
+		elsif keep_n = config.get("settings.remove_all_but_n_full", false)
+			keep_n = keep_n.to_i
+			# Get the date of the last full backup to keep
+			if last_full_to_keep = prev_backups.select{ |o| o[:type] == :full }[-keep_n]
+				# If there is a last full one...
+				remove = prev_backups.select{ |o| o[:date] < last_full_to_keep[:date] }
+			end
+		end
+		return if remove.empty?
+
+		puts "Removing #{remove.count} old backup files"
+		backup_config = self.gen_backup_config(opts[:profile], config)
+		remove.each do |object|
+			S3::S3Object.delete("#{backup_config[:dest_prefix]}/#{object[:name]}", backup_config[:bucket])
+		end
+
+		#prev_backups.select{ |o| o[:date] < self.parse_interval(config["settings."])}
 	end
 
 	def gen_backup_config(profile, config)
@@ -91,8 +131,33 @@ module S3TarBackup
 
 	def upload(source, bucket, dest_name)
 		open(source) do |f|
-			S3::S3Object.store("#{dest_name}", f, bucket)
+			S3::S3Object.store(dest_name, f, bucket)
 		end
+	end
+
+	def parse_objects(bucket, prefix, profile)
+		objects = []
+		S3::Bucket.objects(bucket, :prefix => prefix).each do |object|
+			objects << Backup.parse_name(File.basename(object.path), profile)
+		end
+		objects.compact.sort_by{ |o| o[:date] }
+	end
+
+	def parse_interval(interval_str)
+		time = Time.now
+		time -= $1.to_i if interval_str =~ /(\d+)s/
+		time -= $1.to_i*60 if interval_str =~ /(\d+)m/
+		time -= $1.to_i*3600 if interval_str =~ /(\d+)h/
+		time -= $1.to_i*86400 if interval_str =~ /(\d+)D/
+		time -= $1.to_i*604800 if interval_str =~ /(\d+)W/
+		time -= $1.to_i*2592000 if interval_str =~ /(\d+)M/
+		time -= $1.to_i*31536000 if interval_str =~ /(\d+)Y/
+		time
+	end
+
+	def full_required?(interval_str, objects)
+		time = self.parse_interval(interval_str)
+		objects.select{ |o| o[:type] == :full && o[:date] > time }.empty?
 	end
 
 end

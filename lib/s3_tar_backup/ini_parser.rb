@@ -124,7 +124,7 @@ module S3TarBackup
 			key = key.to_sym
 
 			unless @config.has_key?(section) && @config[section].has_key?(key)
-				raise "Tried to access config key #{section}.#{key} which doesn't exist" unless default
+				raise "Tried to access config key #{section}.#{key} which doesn't exist" if default.nil?
 				return default
 			end
 
