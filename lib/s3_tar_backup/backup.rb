@@ -10,8 +10,8 @@ module S3TarBackup
 		@archive
 
 
-		def initialize(backup_dir, name, sources, exclude)
-			@backup_dir, @name, @sources, @exclude, @snar = backup_dir, name, [*sources], [*exclude]
+		def initialize(backup_dir, name, sources, exclude, verbose=false)
+			@backup_dir, @name, @sources, @exclude = backup_dir, name, [*sources], [*exclude]
 			@time = Time.now
 		end
 
@@ -33,11 +33,11 @@ module S3TarBackup
 			File.join(@backup_dir, "backup-#{@name}.#{@time.strftime('%Y%m%d_%H%M%S')}.#{type}.tar.bz2")
 		end
 
-		def backup_cmd
+		def backup_cmd(verbose=false)
 			exclude = @exclude.map{ |e| "\"#{e}\""}.join(' ')
 			sources = @sources.map{ |s| "\"#{s}\""}.join(' ')
 			@archive = archive
-			"tar cjf \"#{@archive}\" -g \"#{snar_path}\" --exclude #{exclude} --no-check-device #{sources}"
+			"tar cj#{verbose ? 'v' : ''}f \"#{@archive}\" -g \"#{snar_path}\" --exclude #{exclude} --no-check-device #{sources}"
 		end
 
 		def self.parse_name(name, profile)
@@ -51,8 +51,8 @@ module S3TarBackup
 		end
 
 		# No real point in creating a whole new class for this one
-		def self.restore_cmd(restore_into, restore_from)
-			"tar xjf #{restore_from} -G -C #{restore_into}"
+		def self.restore_cmd(restore_into, restore_from, verbose=false)
+			"tar xj#{verbose ? 'v' : ''}f #{restore_from} -G -C #{restore_into}"
 		end
 
 	end

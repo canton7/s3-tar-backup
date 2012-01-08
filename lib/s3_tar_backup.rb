@@ -17,6 +17,7 @@ module S3TarBackup
 			opt :cleanup, "Clean up old backups"
 			opt :restore, "Restore a backup to the specified dir", :type => :string
 			opt :restore_date, "Restore a backup from the specified date. Format YYYYMM[DD[hh[mm[ss]]]]", :type => :string
+			opt :verbose, "Show verbose output", :short => 'v'
 			conflicts :backup, :cleanup, :restore
 		end
 
@@ -38,8 +39,8 @@ module S3TarBackup
 				self.perform_cleanup(opts, config, prev_backups) if opts[:backup] || opts[:cleanup]
 				self.perform_restore(opts, config, prev_backups) if opts[:restore_given]
 			end
-		rescue Exception => e
-			Trollop::die e.to_s
+		#rescue Exception => e
+		#	Trollop::die e.to_s
 		end
 	end
 
@@ -55,9 +56,9 @@ module S3TarBackup
 		full_required = self.full_required?(config["settings.full_if_older_than"], prev_backups)
 		puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full_backup]
 		if full_required || opts[:full]
-			self.backup_full(self.gen_backup_config(opts[:profile], config))
+			self.backup_full(self.gen_backup_config(opts[:profile], config), opts[:verbose])
 		else
-			self.backup_incr(self.gen_backup_config(opts[:profile], config))
+			self.backup_incr(self.gen_backup_config(opts[:profile], config), opts[:verbose])
 		end
 	end
 
@@ -102,42 +103,42 @@ module S3TarBackup
 
 	# Config should have the keys
 	# backup_dir, name, soruces, exclude, bucket, dest_prefix
-	def backup_incr(config, out=$stdout, debug=false)
-		out.puts "Starting new incremental backup"
+	def backup_incr(config, verbose=false)
+		puts "Starting new incremental backup"
 		backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude])
 
 		# Try and get hold of the snar file
 		unless backup.snar_exists?
-			out.puts "Failed to find snar file. Attempting to download..."
+			puts "Failed to find snar file. Attempting to download..."
 			s3_snar = "#{config[:dest_prefix]}/#{backup.snar}"
 			if S3::S3Object.exists?(s3_snar, config[:bucket])
-				out.puts "Found file on S3. Downloading"
+				puts "Found file on S3. Downloading"
 				open(backup.snar_path, 'wb') do |f|
 					S3::S3Object.stream(s3_snar, config[:bucket]) do |chunk|
 						f.write(chunk)
 					end
 				end
 			else
-				out.puts "Failed to download snar file. Defaulting to full backup"
+				puts "Failed to download snar file. Defaulting to full backup"
 			end
 		end
 
-		self.backup(config, backup, out, debug)
+		self.backup(config, backup, verbose)
 	end
 
-	def backup_full(config, out=$stdout, debug=false)
-		out.puts "Starting new full backup"
+	def backup_full(config, verbose=false)
+		puts "Starting new full backup"
 		backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude])
 		# Nuke the snar file -- forces a full backup
 		File.delete(backup.snar_path) if File.exists?(backup.snar_path)
-		self.backup(config, backup, out, debug)
+		self.backup(config, backup, verbose)
 	end
 
-	def backup(config, backup, out=$stdout, debug=false)
-		system(backup.backup_cmd)
-		out.puts "Uploading backup #{File.basename(backup.archive)}"
+	def backup(config, backup, verbose=false)
+		system(backup.backup_cmd(verbose))
+		puts "Uploading backup #{File.basename(backup.archive)}"
 		self.upload(backup.archive, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.archive)}")
-		out.puts "Uploading snar"
+		puts "Uploading snar"
 		self.upload(backup.snar_path, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.snar)}")
 		File.delete(backup.archive)
 	end
@@ -180,7 +181,7 @@ module S3TarBackup
 				end
 			end
 
-			system(Backup.restore_cmd(restore_dir, dl_file))
+			system(Backup.restore_cmd(restore_dir, dl_file, opts[:verbose]))
 
 			File.delete(dl_file)
 		end
