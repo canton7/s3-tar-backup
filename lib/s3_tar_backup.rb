@@ -38,7 +38,7 @@ module S3TarBackup
 
 			opts[:profile].dup.each do |profile|
 				puts "===== Backup up profile #{profile} ====="
-				raise "No such profile: #{profile}" unless config.has_section?("backup.#{profile}")
+				raise "No such profile: #{profile}" unless config.has_section?("profile.#{profile}")
 				opts[:profile] = profile
 				prev_backups = self.parse_objects('creek-backups', 'tar_test/', opts[:profile])
 				self.perform_backup(opts, config, prev_backups) if opts[:backup]
@@ -96,12 +96,12 @@ module S3TarBackup
 	end
 
 	def gen_backup_config(profile, config)
-		bucket, dest_prefix = config["backup.#{profile}.dest"].split('/', 2)
+		bucket, dest_prefix = config["profile.#{profile}.dest"].split('/', 2)
 		backup_config = {
-			:backup_dir => config["backup.#{profile}.backup_dir"],
+			:backup_dir => config["profile.#{profile}.backup_dir"],
 			:name => profile,
-			:sources => [*config["backup.#{profile}.source"]],
-			:exclude => [*config.get("backup.#{profile}.exclude", [])],
+			:sources => [*config["profile.#{profile}.source"]],
+			:exclude => [*config.get("profile.#{profile}.exclude", [])],
 			:bucket => bucket,
 			:dest_prefix => dest_prefix,
 		}
