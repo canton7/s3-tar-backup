@@ -6,8 +6,9 @@ module S3TarBackup
 		@name
 		@sources
 		@exclude
-		@snar
 		@time # Here to avoid any sort of race conditions
+		@archive
+
 
 		def initialize(backup_dir, name, sources, exclude)
 			@backup_dir, @name, @sources, @exclude, @snar = backup_dir, name, [*sources], [*exclude]
@@ -15,22 +16,28 @@ module S3TarBackup
 		end
 
 		def snar
-			File.join(@backup_dir, "backup.snar")
+			"backup.snar"
+		end
+
+		def snar_path
+			File.join(@backup_dir, snar)
 		end
 
 		def snar_exists?
-			File.exists?(snar)
+			File.exists?(snar_path)
 		end
 
 		def archive
+			return @archive if @archive
 			type = snar_exists? ? 'incr' : 'full'
-			File.join(@backup_dir, "backup-#{@name}.#{@time.strftime('%Y%m%d_%H%M%S')}-#{type}.tlz")
+			File.join(@backup_dir, "backup-#{@name}.#{@time.strftime('%Y%m%d_%H%M%S')}-#{type}.tar.bz2")
 		end
 
 		def backup_cmd
 			exclude = @exclude.map{ |e| "\"#{e}\""}.join(' ')
 			sources = @sources.map{ |s| "\"#{s}\""}.join(' ')
-			"tar cvf \"#{archive}\" --lzma -g \"#{snar}\" --exclude #{exclude} --no-check-device #{sources}"
+			@archive = archive
+			"tar cjf \"#{@archive}\" -g \"#{snar_path}\" --exclude #{exclude} --no-check-device #{sources}"
 		end
 
 		def backup
