@@ -187,6 +187,10 @@ module S3TarBackup
 			end
 		end
 
+		def has_section?(section)
+			@config.has_key?(section.to_sym)
+		end
+
 		def each
 			@config.each_with_index do |section_key, section|
 				section.each_with_index do |key, value|

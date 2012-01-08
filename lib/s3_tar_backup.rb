@@ -13,7 +13,7 @@ module S3TarBackup
 			opt :config, "Configuration file", :short => 'c', :type => :string, :required => true
 			opt :backup, "Make an incremental backup"
 			opt :full, "Make the backup a full backup"
-			opt :profile, "The backup profile to use", :short => 'p', :type => :string, :required => true
+			opt :profile, "The backup profile(s) to use", :short => 'p', :type => :strings, :required => true
 			opt :cleanup, "Clean up old backups"
 			opt :restore, "Restore a backup to the specified dir", :type => :string
 			opt :restore_date, "Restore a backup from the specified date. Format YYYYMM[DD[hh[mm[ss]]]]", :type => :string
@@ -24,17 +24,23 @@ module S3TarBackup
 		Trollop::die "--full requires --backup" if opts[:full] && !opts[:backup]
 		Trollop::die "--restore-date requires --restore" if opts[:restore_date_given] && !opts[:restore_given]
 
-		raise "Config file #{opts[:config]} not found" unless File.exists?(opts[:config])
-		config = IniParser.new(opts[:config]).load
-		self.connect_s3(config['settings.aws_access_key_id'], config['settings.aws_secret_access_key'])
+		begin
+			raise "Config file #{opts[:config]} not found" unless File.exists?(opts[:config])
+			config = IniParser.new(opts[:config]).load
+			self.connect_s3(config['settings.aws_access_key_id'], config['settings.aws_secret_access_key'])
 
-		prev_backups = self.parse_objects('creek-backups', 'tar_test/', opts[:profile])
-
-		self.perform_backup(opts, config, prev_backups) if opts[:backup]
-
-		self.perform_cleanup(opts, config, prev_backups) if opts[:backup] || opts[:cleanup]
-
-		self.perform_restore(opts, config, prev_backups) if opts[:restore_given]
+			opts[:profile].dup.each do |profile|
+				puts "===== Backup up profile #{profile} ====="
+				raise "No such profile: #{profile}" unless config.has_section?("backup.#{profile}")
+				opts[:profile] = profile
+				prev_backups = self.parse_objects('creek-backups', 'tar_test/', opts[:profile])
+				self.perform_backup(opts, config, prev_backups) if opts[:backup]
+				self.perform_cleanup(opts, config, prev_backups) if opts[:backup] || opts[:cleanup]
+				self.perform_restore(opts, config, prev_backups) if opts[:restore_given]
+			end
+		rescue Exception => e
+			Trollop::die e.to_s
+		end
 	end
 
 	def connect_s3(access_key, secret_key)
@@ -133,7 +139,7 @@ module S3TarBackup
 		self.upload(backup.archive, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.archive)}")
 		out.puts "Uploading snar"
 		self.upload(backup.snar_path, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.snar)}")
-		#File.delete(backup.archive)
+		File.delete(backup.archive)
 	end
 
 	def upload(source, bucket, dest_name)
