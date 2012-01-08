@@ -23,7 +23,8 @@ module S3TarBackup
 		end
 
 		def archive
-			File.join(@backup_dir, "backup-#{@name}.#{@time.strftime('%Y%m%d_%H%M%S')}.tlz")
+			type = snar_exists? ? 'incr' : 'full'
+			File.join(@backup_dir, "backup-#{@name}.#{@time.strftime('%Y%m%d_%H%M%S')}-#{type}.tlz")
 		end
 
 		def backup_cmd
