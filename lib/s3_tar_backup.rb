@@ -2,7 +2,7 @@ require 'aws/s3'
 require 'trollop'
 require 's3_tar_backup/ini_parser'
 require 's3_tar_backup/backup'
-require 'pp'
+require 's3_tar_backup/version'
 include AWS
 
 module S3TarBackup
@@ -10,6 +10,12 @@ module S3TarBackup
 
 	def run
 		opts = Trollop::options do
+			version VERSION
+			banner "Backs up files to, and restores files from, Amazon's S3 storage, using tar incremental backups\n\n" \
+				"Usage:\ns3-tar-backup -c config.ini -p profile --backup [--full] [-v]\n" \
+				"s3-tar-backup -c config.ini -p profile --cleanup [-v]\n" \
+				"s3-tar-backup -c config.ini -p profile --restore restore_dir\n\t[--restore_date date] [-v]\n\n" \
+				"Option details:\n"
 			opt :config, "Configuration file", :short => 'c', :type => :string, :required => true
 			opt :backup, "Make an incremental backup"
 			opt :full, "Make the backup a full backup"
@@ -39,8 +45,8 @@ module S3TarBackup
 				self.perform_cleanup(opts, config, prev_backups) if opts[:backup] || opts[:cleanup]
 				self.perform_restore(opts, config, prev_backups) if opts[:restore_given]
 			end
-		#rescue Exception => e
-		#	Trollop::die e.to_s
+		rescue Exception => e
+			Trollop::die e.to_s
 		end
 	end
 
