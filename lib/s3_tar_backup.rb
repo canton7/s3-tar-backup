@@ -15,12 +15,14 @@ module S3TarBackup
 			opt :full, "Make the backup a full backup"
 			opt :profile, "The backup profile to use", :short => 'p', :type => :string, :required => true
 			opt :cleanup, "Clean up old backups"
-			conflicts :backup, :cleanup
+			opt :restore, "Restore a backup to the specified dir", :type => :string
+			opt :restore_date, "Restore a backup from the specified date. Format YYYYMM[DD[hh[mm[ss]]]]", :type => :string
+			conflicts :backup, :cleanup, :restore
 		end
 
-		if opts[:full] && !opts[:backup]
-			Trollop::die "--full requires --backup"
-		end
+
+		Trollop::die "--full requires --backup" if opts[:full] && !opts[:backup]
+		Trollop::die "--restore-date requires --restore" if opts[:restore_date_given] && !opts[:restore_given]
 
 		raise "Config file #{opts[:config]} not found" unless File.exists?(opts[:config])
 		config = IniParser.new(opts[:config]).load
@@ -31,6 +33,8 @@ module S3TarBackup
 		self.perform_backup(opts, config, prev_backups) if opts[:backup]
 
 		self.perform_cleanup(opts, config, prev_backups) if opts[:backup] || opts[:cleanup]
+
+		self.perform_restore(opts, config, prev_backups) if opts[:restore_given]
 	end
 
 	def connect_s3(access_key, secret_key)
@@ -102,7 +106,7 @@ module S3TarBackup
 			s3_snar = "#{config[:dest_prefix]}/#{backup.snar}"
 			if S3::S3Object.exists?(s3_snar, config[:bucket])
 				out.puts "Found file on S3. Downloading"
-				open(backup.snar_path, 'w') do |f|
+				open(backup.snar_path, 'wb') do |f|
 					S3::S3Object.stream(s3_snar, config[:bucket]) do |chunk|
 						f.write(chunk)
 					end
@@ -129,13 +133,53 @@ module S3TarBackup
 		self.upload(backup.archive, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.archive)}")
 		out.puts "Uploading snar"
 		self.upload(backup.snar_path, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.snar)}")
-		File.delete(backup.archive)
+		#File.delete(backup.archive)
 	end
 
 	def upload(source, bucket, dest_name)
 		open(source) do |f|
 			S3::S3Object.store(dest_name, f, bucket)
 		end
+	end
+
+	def perform_restore(opts, config, prev_backups)
+		# If restore date given, parse
+		if opts[:restore_date_given]
+			m = opts[:restore_date].match(/(\d\d\d\d)(\d\d)(\d\d)?(\d\d)?(\d\d)?(\d\d)?/)
+			raise "Unknown date format in --restore-to" if m.nil?
+			restore_to = Time.new(*m[1..-1].map{ |s| s.to_i if s })
+		else
+			restore_to = Time.now
+		end
+
+		# Find the index of the first backup, incremental or full, before that date
+		restore_end_index = prev_backups.rindex{ |o| o[:date] < restore_to }
+		raise "Failed to find a backup for that date" unless restore_end_index
+
+		# Find the first full backup before that one
+		restore_start_index = prev_backups[0..restore_end_index].rindex{ |o| o[:type] == :full }
+
+		backup_config = self.gen_backup_config(opts[:profile], config)
+		restore_dir = opts[:restore].chomp('/') << '/'
+
+		Dir.mkdir(restore_dir) unless Dir.exists?(restore_dir)
+		raise "Detination dir is not a directory" unless File.directory?(restore_dir)
+
+		prev_backups[restore_start_index..restore_end_index].each do |object|
+			puts "Fetching #{object[:name]}"
+			dl_file = "#{backup_config[:backup_dir]}/#{object[:name]}"
+			open(dl_file, 'wb') do |f|
+				S3::S3Object.stream("#{backup_config[:dest_prefix]}/#{object[:name]}", backup_config[:bucket]) do |chunk|
+					f.write(chunk)
+				end
+			end
+
+			system(Backup.restore_cmd(restore_dir, dl_file))
+
+			File.delete(dl_file)
+		end
+		#p Backup.restore_cmd(opts[:backup], )
+		#prev_backups.select{ |o| o[:type] == :full && o[:date] < restore_to}[0]
 	end
 
 	def parse_objects(bucket, prefix, profile)

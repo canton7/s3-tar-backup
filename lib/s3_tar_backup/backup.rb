@@ -50,5 +50,10 @@ module S3TarBackup
 			}
 		end
 
+		# No real point in creating a whole new class for this one
+		def self.restore_cmd(restore_into, restore_from)
+			"tar xjf #{restore_from} -G -C #{restore_into}"
+		end
+
 	end
 end
