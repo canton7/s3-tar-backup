@@ -1,4 +1,4 @@
-require 's3-tar-backup/backup'
+require 's3_tar_backup/backup'
 require 'pp'
 include S3TarBackup
 
