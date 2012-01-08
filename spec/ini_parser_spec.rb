@@ -97,4 +97,12 @@ describe IniParser do
 		par.render_config.should == "[some_section \"my_section\"]\n\nkey = value\n\n\n" \
 			"[some_section \"my_other_section\"]\n\nkey2 = value2"
 	end
+
+	it "should accept arrays of config values" do
+		par = IniParser.new("#{ini_folder}/key_arrays.ini").load
+		par['section.key'].should == ['value1', 'value2', 'value3']
+		par['section2.key'] = ['value4', 'value5', 'value6']
+		par.render_config.should == %Q{[section]\n\nkey = value1\nkey = value2\nkey = value3\n\n\n} << \
+			%Q{[section2]\n\nkey = value4\nkey = value5\nkey = value6}
+	end
 end

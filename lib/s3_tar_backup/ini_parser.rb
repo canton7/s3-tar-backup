@@ -50,7 +50,12 @@ module S3TarBackup
 				when /^(\S+)\s*=\s*([^;]*?)\s*(?:;\s+(.*))?$/
 					raise "Config key before section" unless section
 					key = $1.chomp.to_sym
-					config[section][key] = $2.chomp
+					if config[section].has_key?(key)
+						config[section][key] = [config[section][key]] unless config[section][key].is_a?(Array)
+						config[section][key] << $2.chomp
+					else
+						config[section][key] = $2.chomp
+					end
 					# If we found a comment at the end of the line
 					next_comment[:after] = $3 if $3
 					comments[section][key] = next_comment unless next_comment == {:before => [], :after => nil}
@@ -89,14 +94,15 @@ module S3TarBackup
 				else
 					r << "\n[#{section_key}]\n\n"
 				end
-				section.each do |key, value|
+				section.each do |key, values|
+					values = [*values]
 					comments_before, comments_after = '', ''
 					if comments && @comments.include?(section_key) && @comments[section_key].include?(key)
 						comments_before = @comments[section_key][key][:before].inject(''){ |s,v| s << "; #{v}\n" }
 						comments_after = " ; #{@comments[section_key][key][:after]}" if @comments[section_key][key][:after]
 					end
 					r << comments_before
-					r << "#{key} = #{value}"
+					r << values.map{ |value| "#{key} = #{value}" }.join("\n")
 					r << comments_after << "\n\n"
 				end
 			end
