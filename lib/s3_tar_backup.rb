@@ -96,13 +96,14 @@ module S3TarBackup
 	end
 
 	def gen_backup_config(profile, config)
+		bucket, dest_prefix = config["backup.#{profile}.dest"].split('/', 2)
 		backup_config = {
 			:backup_dir => config["backup.#{profile}.backup_dir"],
 			:name => profile,
 			:sources => [*config["backup.#{profile}.source"]],
 			:exclude => [*config.get("backup.#{profile}.exclude", [])],
-			:bucket => config["backup.#{profile}.bucket"],
-			:dest_prefix => config["backup.#{profile}.prefix"],
+			:bucket => bucket,
+			:dest_prefix => dest_prefix,
 		}
 		backup_config
 	end
