@@ -89,4 +89,12 @@ describe IniParser do
 			}
 		}
 	end
+
+	it "should handle files with compound sections" do
+		par = IniParser.new("#{ini_folder}/compound_section.ini").load
+		par['some_section.my_section.key'].should == 'value'
+		par['some_section.my_other_section.key2'] = 'value2'
+		par.render_config.should == "[some_section \"my_section\"]\n\nkey = value\n\n\n" \
+			"[some_section \"my_other_section\"]\n\nkey2 = value2"
+	end
 end

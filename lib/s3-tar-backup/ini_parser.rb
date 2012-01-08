@@ -39,8 +39,10 @@ module S3TarBackup
 			config_lines.each do |line|
 				case line.chomp
 				# Section
-				when /^\[(\S+)\]$/
-					section = $1.chomp.to_sym
+				when /^\[(\S+)(?: "(\S+)")?\]$/
+					section = $1.chomp
+					section << ".#{$2.chomp}" if $2
+					section = section.to_sym
 					config[section] = {} unless config.has_key?(section)
 					comments[section] = {} unless comments.has_key?(section)
 					next_comment = {:before => [], :after => nil}
@@ -64,7 +66,7 @@ module S3TarBackup
 		# Applies the defaults passed to the constructor
 		def apply_defaults(defaults)
 			defaults.each do |key, default|
-				section, key = key.split('.', 2)
+				section, key = key.match(/(.*)\.(.*)/)[1..2]
 
 				if default.is_a?(Array)
 					default_val, comment = default
@@ -81,7 +83,12 @@ module S3TarBackup
 		def render_config(comments=true)
 			r = ''
 			@config.each do |section_key, section|
-				r << "\n[#{section_key}]\n\n"
+				section_key_parts = section_key.to_s.split('.')
+				if section_key_parts.count > 1
+					r << "\n[#{section_key_parts.shift} \"#{section_key_parts.join(' ')}\"]\n\n"
+				else
+					r << "\n[#{section_key}]\n\n"
+				end
 				section.each do |key, value|
 					comments_before, comments_after = '', ''
 					if comments && @comments.include?(section_key) && @comments[section_key].include?(key)
@@ -106,7 +113,7 @@ module S3TarBackup
 		# This function will use type information from self.defaults / default, if available.
 		# Example: config_object.get('section.key', 'default_value')
 		def get(arg, default=nil)
-			section, key = arg.split('.', 2)
+			section, key = arg.match(/(.*)\.(.*)/)[1..2]
 			section = section.to_sym
 			key = key.to_sym
 
@@ -153,7 +160,7 @@ module S3TarBackup
 		# comments: The comments to set, if any. If multiple lines are desired, they should be separated by "\n"
 		# Example: config_object.set('section.key', 'value', 'This is the comment\nExplaining section.key')
 		def set(arg, value, comments=nil)
-			section, key = arg.split('.', 2)
+			section, key = arg.match(/(.*)\.(.*)/)[1..2]
 			section = section.to_sym
 			key = key.to_sym
 
