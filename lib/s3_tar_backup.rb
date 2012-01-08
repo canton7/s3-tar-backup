@@ -12,9 +12,12 @@ module S3TarBackup
 		opts = Trollop::options do
 			opt :config, "Configuration file", :short => 'c', :type => :string, :required => true
 			opt :backup, "Make an incremental backup"
-			opt :full_backup, "Make a full backup"
+			opt :full, "Make the backup a full backup"
 			opt :profile, "The backup profile to use", :short => 'p', :type => :string, :required => true
-			conflicts :backup, :full_backup
+		end
+
+		if opts[:full] && !opts[:backup]
+			Trollop::die "--full requires --backup"
 		end
 
 		raise "Config file #{opts[:config]} not found" unless File.exists?(opts[:config])
@@ -23,9 +26,7 @@ module S3TarBackup
 
 		prev_backups = self.parse_objects('creek-backups', 'tar_test/', opts[:profile])
 
-		if opts[:backup] || opts[:full_backup]
-			self.perform_backup(opts, config, prev_backups)
-		end
+		self.perform_backup(opts, config, prev_backups) if opts[:backup]
 
 		self.perform_cleanup(opts, config, prev_backups)
 	end
@@ -41,9 +42,9 @@ module S3TarBackup
 	def perform_backup(opts, config, prev_backups)
 		full_required = self.full_required?(config["settings.full_if_older_than"], prev_backups)
 		puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full_backup]
-		if full_required || opts[:full_backup]
+		if full_required || opts[:full]
 			self.backup_full(self.gen_backup_config(opts[:profile], config))
-		elsif opts[:backup]
+		else
 			self.backup_incr(self.gen_backup_config(opts[:profile], config))
 		end
 	end
