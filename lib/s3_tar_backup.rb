@@ -14,6 +14,8 @@ module S3TarBackup
 			opt :backup, "Make an incremental backup"
 			opt :full, "Make the backup a full backup"
 			opt :profile, "The backup profile to use", :short => 'p', :type => :string, :required => true
+			opt :cleanup, "Clean up old backups"
+			conflicts :backup, :cleanup
 		end
 
 		if opts[:full] && !opts[:backup]
@@ -28,7 +30,7 @@ module S3TarBackup
 
 		self.perform_backup(opts, config, prev_backups) if opts[:backup]
 
-		self.perform_cleanup(opts, config, prev_backups)
+		self.perform_cleanup(opts, config, prev_backups) if opts[:backup] || opts[:cleanup]
 	end
 
 	def connect_s3(access_key, secret_key)
