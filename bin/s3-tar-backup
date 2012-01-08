@@ -1,0 +1,7 @@
+#!/usr/bin/env ruby
+
+$LOAD_PATH.unshift File.expand_path(File.dirname($PROGRAM_NAME)+File::SEPARATOR+'..'+File::SEPARATOR+'lib')
+
+require 's3_tar_backup'
+
+S3TarBackup::run
