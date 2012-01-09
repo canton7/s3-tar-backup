@@ -191,6 +191,10 @@ module S3TarBackup
 			@config.has_key?(section.to_sym)
 		end
 
+		def find_sections(pattern=/.*/)
+			@config.select{ |k,v| k =~ pattern }
+		end
+
 		def each
 			@config.each_with_index do |section_key, section|
 				section.each_with_index do |key, value|

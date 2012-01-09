@@ -21,7 +21,7 @@ module S3TarBackup
 			opt :config, "Configuration file", :short => 'c', :type => :string, :required => true
 			opt :backup, "Make an incremental backup"
 			opt :full, "Make the backup a full backup"
-			opt :profile, "The backup profile(s) to use", :short => 'p', :type => :strings, :required => true
+			opt :profile, "The backup profile(s) to use (default all)", :short => 'p', :type => :strings
 			opt :cleanup, "Clean up old backups"
 			opt :restore, "Restore a backup to the specified dir", :type => :string
 			opt :restore_date, "Restore a backup from the specified date. Format YYYYMM[DD[hh[mm[ss]]]]", :type => :string
@@ -37,9 +37,10 @@ module S3TarBackup
 		begin
 			raise "Config file #{opts[:config]} not found" unless File.exists?(opts[:config])
 			config = IniParser.new(opts[:config]).load
+			profiles = opts[:profile] || config.find_sections(/^profile\./).keys.map{ |k| k.to_s.split('.', 2)[1] }
 			self.connect_s3(config['settings.aws_access_key_id'], config['settings.aws_secret_access_key'])
 
-			opts[:profile].dup.each do |profile|
+			profiles.dup.each do |profile|
 				raise "No such profile: #{profile}" unless config.has_section?("profile.#{profile}")
 				opts[:profile] = profile
 				backup_config = self.gen_backup_config(opts[:profile], config)

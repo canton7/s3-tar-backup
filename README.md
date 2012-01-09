@@ -124,13 +124,15 @@ s3-tar-backup works in three modes: backup, restore, and cleanup.
 ### Backup
 
 ```
-s3-tar-backup --config <config_file> --profile <profile> --backup [--full] [--verbose]
+s3-tar-backup --config <config_file> [--profile <profile>] --backup [--full] [--verbose]
 ```
 
 You can use `-c` instead of `--config`, and `-p` instead of `--profile`.
 
-`<config_file>` is the path to the file you created above, and `<profile` is the name of a profile inside it.
+`<config_file>` is the path to the file you created above, and `<profile>` is the name of a profile inside it.
 You can also specify multiple profiles.
+
+If no profile is specified, all profiles are backed up.
 
 `--full` will force s3-tar-backup to do a full backup (instead of an incremental one), regardless of whether it thinks it should do one.
 
@@ -147,7 +149,7 @@ s3-tar-backup -c ~/.backup/config.ini -p www home --backup
 **Note:** Cleans are automatically done at the end of each backup.
 
 ```
-s3-tar-backup --config <config_file> --profile <profile> --cleanup
+s3-tar-backup --config <config_file> [--profile <profile>] --cleanup
 ```
 
 s3-tar-backup will go through all old backups, and remove those specified by `remove_all_but_n_full` or `remove_older_than`.
@@ -155,7 +157,7 @@ s3-tar-backup will go through all old backups, and remove those specified by `re
 ### Restore
 
 ```
-s3-tar-backup --config <config_file> --profile <profile> --restore <restore_dir> [--restore_date <restore_date>] [--verbose]
+s3-tar-backup --config <config_file> [--profile <profile>] --restore <restore_dir> [--restore_date <restore_date>] [--verbose]
 ```
 
 This command will get s3-tar-backup to fetch all the necessary data to restore the latest version of your backup (or an older one if you use `--restore-date`), and stick it into `<restore_dir>`.
