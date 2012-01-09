@@ -30,6 +30,7 @@ module S3TarBackup
 
 		Trollop::die "--full requires --backup" if opts[:full] && !opts[:backup]
 		Trollop::die "--restore-date requires --restore" if opts[:restore_date_given] && !opts[:restore_given]
+		Trollop::die "Need one of --backup, --cleanup, --restore" unless opts[:backup] || opts[:cleanup] || opts[:restore_given]
 
 		begin
 			raise "Config file #{opts[:config]} not found" unless File.exists?(opts[:config])
@@ -37,7 +38,6 @@ module S3TarBackup
 			self.connect_s3(config['settings.aws_access_key_id'], config['settings.aws_secret_access_key'])
 
 			opts[:profile].dup.each do |profile|
-				puts "===== Backup up profile #{profile} ====="
 				raise "No such profile: #{profile}" unless config.has_section?("profile.#{profile}")
 				opts[:profile] = profile
 				backup_config = self.gen_backup_config(opts[:profile], config)
@@ -60,6 +60,7 @@ module S3TarBackup
 	end
 
 	def perform_backup(opts, config, prev_backups, backup_config)
+		puts "===== Backing up profile #{backup_config[:profile]} ====="
 		full_required = self.full_required?(config["settings.full_if_older_than"], prev_backups)
 		puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full_backup]
 		if full_required || opts[:full]
@@ -70,6 +71,7 @@ module S3TarBackup
 	end
 
 	def perform_cleanup(opts, config, prev_backups, backup_config)
+		puts "===== Cleaning up profile #{backup_config[:profile]} ====="
 		remove = []
 		if age_str = config.get("settings.remove_older_than", false)
 			age = self.parse_interval(age_str)
@@ -157,6 +159,7 @@ module S3TarBackup
 	end
 
 	def perform_restore(opts, config, prev_backups, backup_config)
+		puts "===== Restoring profile #{backup_config[:profile]} ====="
 		# If restore date given, parse
 		if opts[:restore_date_given]
 			m = opts[:restore_date].match(/(\d\d\d\d)(\d\d)(\d\d)?(\d\d)?(\d\d)?(\d\d)?/)
