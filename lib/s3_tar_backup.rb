@@ -62,7 +62,7 @@ module S3TarBackup
 	end
 
 	def perform_backup(opts, config, prev_backups, backup_config)
-		puts "===== Backing up profile #{backup_config[:profile]} ====="
+		puts "===== Backing up profile #{backup_config[:name]} ====="
 		full_required = self.full_required?(config["settings.full_if_older_than"], prev_backups)
 		puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full_backup]
 		if full_required || opts[:full]
@@ -73,7 +73,7 @@ module S3TarBackup
 	end
 
 	def perform_cleanup(opts, config, prev_backups, backup_config)
-		puts "===== Cleaning up profile #{backup_config[:profile]} ====="
+		puts "===== Cleaning up profile #{backup_config[:name]} ====="
 		remove = []
 		if age_str = config.get("settings.remove_older_than", false)
 			age = self.parse_interval(age_str)
@@ -174,7 +174,7 @@ module S3TarBackup
 	end
 
 	def perform_restore(opts, config, prev_backups, backup_config)
-		puts "===== Restoring profile #{backup_config[:profile]} ====="
+		puts "===== Restoring profile #{backup_config[:name]} ====="
 		# If restore date given, parse
 		if opts[:restore_date_given]
 			m = opts[:restore_date].match(/(\d\d\d\d)(\d\d)(\d\d)?(\d\d)?(\d\d)?(\d\d)?/)
