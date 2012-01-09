@@ -8,6 +8,8 @@ include AWS
 module S3TarBackup
 	extend self
 
+	UPLOAD_TRIES = 5
+
 	def run
 		opts = Trollop::options do
 			version VERSION
@@ -153,9 +155,22 @@ module S3TarBackup
 	end
 
 	def upload(source, bucket, dest_name)
-		open(source) do |f|
-			S3::S3Object.store(dest_name, f, bucket)
+		tries = 0
+		begin
+			open(source) do |f|
+				S3::S3Object.store(dest_name, f, bucket)
+			end
+		rescue S3::S3Exception => e
+			tries += 1
+			if tries < UPLOAD_TRIES
+				puts "S3 Exception: #{e}"
+				puts "Retrying #{tries}/#{UPLOAD_TRIES}..."
+				retry
+			else
+				raise e
+			end
 		end
+
 	end
 
 	def perform_restore(opts, config, prev_backups, backup_config)
