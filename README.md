@@ -71,6 +71,9 @@ dest = <bucket_name>/<path>
 exclude = </some/dir>
 ; Again, you can specify multiple
 exclude = </some/other/dir>
+; The following two keys are optional
+pre-backup = <some command>
+post-backup = <some command>
 ```
 
 `profile_name` is the name of the profile. You'll use this later.
@@ -84,6 +87,10 @@ You can delete this dir at any time, but that will slow down the next backup sli
 
 `exclude` lines specify files/dirs to exclude from the backup.
 See the `--exclude` option to tar.
+
+`pre-backup` and `post-backup` are two hooks, which are run before and after a backup, respectively.
+Note that `post-backup` is only run after a successful command.
+These can be used to do things such as back up a mysql database.
 
 You can have multiple profiles using the same `dest`, and using the same `backup_dir`.
 

@@ -48,8 +48,8 @@ module S3TarBackup
 				self.perform_cleanup(opts, config, prev_backups, backup_config) if opts[:backup] || opts[:cleanup]
 				self.perform_restore(opts, config, prev_backups, backup_config) if opts[:restore_given]
 			end
-		rescue Exception => e
-			Trollop::die e.to_s
+		#rescue Exception => e
+	#		Trollop::die e.to_s
 		end
 	end
 
@@ -63,12 +63,20 @@ module S3TarBackup
 
 	def perform_backup(opts, config, prev_backups, backup_config)
 		puts "===== Backing up profile #{backup_config[:name]} ====="
+		backup_config[:pre_backup].each_with_index do |cmd, i|
+			puts "Executing pre-backup hook #{i+1}"
+			system(cmd)
+		end
 		full_required = self.full_required?(config["settings.full_if_older_than"], prev_backups)
 		puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full_backup]
 		if full_required || opts[:full]
 			self.backup_full(backup_config, opts[:verbose])
 		else
 			self.backup_incr(backup_config, opts[:verbose])
+		end
+		backup_config[:post_backup].each_with_index do |cmd, i|
+			puts "Executing post-backup hook #{i+1}"
+			system(cmd)
 		end
 	end
 
@@ -108,6 +116,8 @@ module S3TarBackup
 			:exclude => [*config.get("profile.#{profile}.exclude", [])],
 			:bucket => bucket,
 			:dest_prefix => dest_prefix,
+			:pre_backup => [*config.get("profile.#{profile}.pre-backup", [])],
+			:post_backup => [*config.get("profile.#{profile}.post-backup", [])],
 		}
 		backup_config
 	end
