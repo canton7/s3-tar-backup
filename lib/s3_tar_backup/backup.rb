@@ -16,7 +16,7 @@ module S3TarBackup
 		end
 
 		def snar
-			"backup.snar"
+			"backup-#{@name}.snar"
 		end
 
 		def snar_path
