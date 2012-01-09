@@ -40,10 +40,11 @@ module S3TarBackup
 				puts "===== Backup up profile #{profile} ====="
 				raise "No such profile: #{profile}" unless config.has_section?("profile.#{profile}")
 				opts[:profile] = profile
-				prev_backups = self.parse_objects('creek-backups', 'tar_test/', opts[:profile])
-				self.perform_backup(opts, config, prev_backups) if opts[:backup]
-				self.perform_cleanup(opts, config, prev_backups) if opts[:backup] || opts[:cleanup]
-				self.perform_restore(opts, config, prev_backups) if opts[:restore_given]
+				backup_config = self.gen_backup_config(opts[:profile], config)
+				prev_backups = self.parse_objects(backup_config[:bucket], backup_config[:dest_prefix], opts[:profile])
+				self.perform_backup(opts, config, prev_backups, backup_config) if opts[:backup]
+				self.perform_cleanup(opts, config, prev_backups, backup_config) if opts[:backup] || opts[:cleanup]
+				self.perform_restore(opts, config, prev_backups, backup_config) if opts[:restore_given]
 			end
 		rescue Exception => e
 			Trollop::die e.to_s
@@ -58,17 +59,17 @@ module S3TarBackup
 		S3::DEFAULT_HOST.replace("s3-eu-west-1.amazonaws.com")
 	end
 
-	def perform_backup(opts, config, prev_backups)
+	def perform_backup(opts, config, prev_backups, backup_config)
 		full_required = self.full_required?(config["settings.full_if_older_than"], prev_backups)
 		puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full_backup]
 		if full_required || opts[:full]
-			self.backup_full(self.gen_backup_config(opts[:profile], config), opts[:verbose])
+			self.backup_full(backup_config, opts[:verbose])
 		else
-			self.backup_incr(self.gen_backup_config(opts[:profile], config), opts[:verbose])
+			self.backup_incr(backup_config, opts[:verbose])
 		end
 	end
 
-	def perform_cleanup(opts, config, prev_backups)
+	def perform_cleanup(opts, config, prev_backups, backup_config)
 		remove = []
 		if age_str = config.get("settings.remove_older_than", false)
 			age = self.parse_interval(age_str)
@@ -87,7 +88,6 @@ module S3TarBackup
 		return if remove.empty?
 
 		puts "Removing #{remove.count} old backup files"
-		backup_config = self.gen_backup_config(opts[:profile], config)
 		remove.each do |object|
 			S3::S3Object.delete("#{backup_config[:dest_prefix]}/#{object[:name]}", backup_config[:bucket])
 		end
@@ -156,7 +156,7 @@ module S3TarBackup
 		end
 	end
 
-	def perform_restore(opts, config, prev_backups)
+	def perform_restore(opts, config, prev_backups, backup_config)
 		# If restore date given, parse
 		if opts[:restore_date_given]
 			m = opts[:restore_date].match(/(\d\d\d\d)(\d\d)(\d\d)?(\d\d)?(\d\d)?(\d\d)?/)
@@ -173,7 +173,6 @@ module S3TarBackup
 		# Find the first full backup before that one
 		restore_start_index = prev_backups[0..restore_end_index].rindex{ |o| o[:type] == :full }
 
-		backup_config = self.gen_backup_config(opts[:profile], config)
 		restore_dir = opts[:restore].chomp('/') << '/'
 
 		Dir.mkdir(restore_dir) unless Dir.exists?(restore_dir)
