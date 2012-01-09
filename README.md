@@ -98,6 +98,7 @@ The exclude lines are optional -- you can have no exclude lines anywhere in your
 These lines are optional -- you can have no pre-backup or post-backup lines anywhere in your config if you wish.
 Note that `post-backup` is only run after a successful command.
 These can be used to do things such as back up a mysql database.
+Note that you can have multiple `pre-backup` and `post-backup` lines -- all of the listed commands will be executed.
 
 **Note:** You can have multiple profiles using the same `dest`, and using the same `backup_dir`.
 
