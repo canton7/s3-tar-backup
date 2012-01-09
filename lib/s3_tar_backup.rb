@@ -45,12 +45,12 @@ module S3TarBackup
 				opts[:profile] = profile
 				backup_config = self.gen_backup_config(opts[:profile], config)
 				prev_backups = self.parse_objects(backup_config[:bucket], backup_config[:dest_prefix], opts[:profile])
-				self.perform_backup(opts, config, prev_backups, backup_config) if opts[:backup]
-				self.perform_cleanup(opts, config, prev_backups, backup_config) if opts[:backup] || opts[:cleanup]
-				self.perform_restore(opts, config, prev_backups, backup_config) if opts[:restore_given]
+				self.perform_backup(opts, prev_backups, backup_config) if opts[:backup]
+				self.perform_cleanup(prev_backups, backup_config) if opts[:backup] || opts[:cleanup]
+				self.perform_restore(opts, prev_backups, backup_config) if opts[:restore_given]
 			end
-		#rescue Exception => e
-	#		Trollop::die e.to_s
+		rescue Exception => e
+			Trollop::die e.to_s
 		end
 	end
 
@@ -62,13 +62,32 @@ module S3TarBackup
 		S3::DEFAULT_HOST.replace("s3-eu-west-1.amazonaws.com")
 	end
 
-	def perform_backup(opts, config, prev_backups, backup_config)
+	def gen_backup_config(profile, config)
+		bucket, dest_prefix = (config.get("profile.#{profile}.dest", false) || config['settings.dest']).split('/', 2)
+		backup_config = {
+			:backup_dir => config.get("profile.#{profile}.backup_dir", false) || config['settings.backup_dir'],
+			:name => profile,
+			:sources => [*config.get("profile.#{profile}.source", [])] + [*config.get("settings.source", [])],
+			:exclude => [*config.get("profile.#{profile}.exclude", [])] + [*config.get("settings.exclude", [])],
+			:bucket => bucket,
+			:dest_prefix => dest_prefix.chomp('/') << '/',
+			:pre_backup => [*config.get("profile.#{profile}.pre-backup", [])] + [*config.get('settings.pre-backup', [])],
+			:post_backup => [*config.get("profile.#{profile}.post-backup", [])] + [*config.get('settings.post-backup', [])],
+			:full_if_older_than => config.get("profile.#{profile}.full_if_older_than", false) || config['settings.full_if_older_than'],
+			:remove_older_than => config.get("profile.#{profile}.remove_older_than", false) || config.get('settings.remove_older_than', false),
+			:remove_all_but_n_full => config.get("profile.#{profile}.remove_all_but_n_full", false) || config.get('settings.remove_all_but_n_full', false),
+
+		}
+		backup_config
+	end
+
+	def perform_backup(opts, prev_backups, backup_config)
 		puts "===== Backing up profile #{backup_config[:name]} ====="
 		backup_config[:pre_backup].each_with_index do |cmd, i|
 			puts "Executing pre-backup hook #{i+1}"
 			system(cmd)
 		end
-		full_required = self.full_required?(config["settings.full_if_older_than"], prev_backups)
+		full_required = self.full_required?(backup_config[:full_if_older_than], prev_backups)
 		puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full_backup]
 		if full_required || opts[:full]
 			self.backup_full(backup_config, opts[:verbose])
@@ -81,16 +100,16 @@ module S3TarBackup
 		end
 	end
 
-	def perform_cleanup(opts, config, prev_backups, backup_config)
+	def perform_cleanup(prev_backups, backup_config)
 		puts "===== Cleaning up profile #{backup_config[:name]} ====="
 		remove = []
-		if age_str = config.get("settings.remove_older_than", false)
+		if age_str = backup_config[:remove_older_than]
 			age = self.parse_interval(age_str)
 			remove = prev_backups.select{ |o| o[:date] < age }
 			# Don't want to delete anything before the last full backup
 			removed = remove.slice!(remove.rindex{ |o| o[:type] == :full }..-1).count
 			puts "Keeping #{removed} old backups as part of a chain"
-		elsif keep_n = config.get("settings.remove_all_but_n_full", false)
+		elsif keep_n = backup_config[:remove_all_but_n_full]
 			keep_n = keep_n.to_i
 			# Get the date of the last full backup to keep
 			if last_full_to_keep = prev_backups.select{ |o| o[:type] == :full }[-keep_n]
@@ -104,23 +123,6 @@ module S3TarBackup
 		remove.each do |object|
 			S3::S3Object.delete("#{backup_config[:dest_prefix]}/#{object[:name]}", backup_config[:bucket])
 		end
-
-		#prev_backups.select{ |o| o[:date] < self.parse_interval(config["settings."])}
-	end
-
-	def gen_backup_config(profile, config)
-		bucket, dest_prefix = config["profile.#{profile}.dest"].split('/', 2)
-		backup_config = {
-			:backup_dir => config["profile.#{profile}.backup_dir"],
-			:name => profile,
-			:sources => [*config["profile.#{profile}.source"]],
-			:exclude => [*config.get("profile.#{profile}.exclude", [])],
-			:bucket => bucket,
-			:dest_prefix => dest_prefix,
-			:pre_backup => [*config.get("profile.#{profile}.pre-backup", [])],
-			:post_backup => [*config.get("profile.#{profile}.post-backup", [])],
-		}
-		backup_config
 	end
 
 	# Config should have the keys
@@ -184,7 +186,7 @@ module S3TarBackup
 
 	end
 
-	def perform_restore(opts, config, prev_backups, backup_config)
+	def perform_restore(opts, prev_backups, backup_config)
 		puts "===== Restoring profile #{backup_config[:name]} ====="
 		# If restore date given, parse
 		if opts[:restore_date_given]

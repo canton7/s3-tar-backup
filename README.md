@@ -26,20 +26,40 @@ sudo rake install
 Configuration
 -------------
 
+### Introduction
+
+Configuration is done using an ini file, which can be in the location of your choice.
+
+The config file consists of two sections: a global `[settings]` section, followed by profiles.
+With the exception of two keys, every configuration key can be specified either in `[settings]`, in a profile, or both (in which case the profile value is either replaces, or is added to, the value from `[settings]`).
+
 ### Global config
-
-Configuration is done using an ini file.
-
-Create this file in the location of your choice, and add the following:
 
 ```ini
 [settings]
+; These two keys must be located in this section
 aws_access_key_id = <your aws access key>
 aws_secret_access_key = <your aws secret key>
+
+; These keys can either be located here, or in your profiles, or both
+; The value from the profile will replace the value specified here
 full_if_older_than = <timespec>
+
 ; Choose one of the following two settings
 remove_older_than = <timespec>
 remove_all_but_n_full = <number>
+
+backup_dir = </path/to/dir>
+dest = <bucket_name>/<path>
+pre-backup = <some command>
+post-backup = <some command>
+
+; You have have multiple lines of the following types.
+; Value from here and from your profiles will be combined
+source = </path/to/another/source>
+source = </path/to/another/source>
+exclude = </some/dir>
+exclude = </some/other/dir>
 ```
 
 `aws_access_key_id` and `aws_secret_access_key` are fairly obvious -- you'll have been given these when you signed up for S3.
@@ -54,45 +74,45 @@ The calendar here is unsophisticated: a month is always 30 days, a year is alway
 
 `remove_all_but_n_full` tells s3-tar-backup to remove all backups which were made before the last `n` full backups.
 
+`backup_dir` is the directory used (a) to store temporary data, and (b) to store a record of what files were backed up last time (tar's snar file).
+You can delete this dir at any time, but that will slow down the next backup slightly.
+
+`source` contains the folders to be backed up.
+
+`dest` is the place to back the folders up to. It consists of the name of the S3 bucket (buckets aren't create automatically), followed by the folder to store objects in, for example `my-backups/tar/`
+
+`exclude` lines specify files/dirs to exclude from the backup.
+See the `--exclude` option to tar.
+The exclude lines are optional -- you can have no exclude lines anywhere in your config if you wish.
+
+`pre-backup` and `post-backup` are two hooks, which are run before and after a backup, respectively.
+These lines are optional -- you can have no pre-backup or post-backup lines anywhere in your config if you wish.
+Note that `post-backup` is only run after a successful command.
+These can be used to do things such as back up a mysql database.
+
+**Note:** You can have multiple profiles using the same `dest`, and using the same `backup_dir`.
+
 ### Profile config
 
 Next, define your profiles.
-A profile comprises one of more source directories, the bucket to and path to upload to, a temporary directory, and some optional excludes.  
-It takes this form:
+
+Profiles are used to specify, or override from the global config, those config keys which may be specified in either the global config or in a profile.
+
+A profile takes the form:
 
 ```ini
 [profile "profile_name"]
+; You can optionally specify the following keys
 backup_dir = </path/to/dir>
 source = </path/to/source>
-; You can have multiple source lines
 source = </path/to/another/source>
 dest = <bucket_name>/<path>
-; The excludes are optional
 exclude = </some/dir>
-; Again, you can specify multiple
-exclude = </some/other/dir>
-; The following two keys are optional
 pre-backup = <some command>
 post-backup = <some command>
 ```
 
 `profile_name` is the name of the profile. You'll use this later.
-
-`backup_dir` is the directory use (a) to store temporary data, and (b) to store a record of what files were backed up last time (tar's snar file).
-You can delete this dir at any time, but that will slow down the next backup slightly.
-
-`source` contains the folders to be backed up.
-
-`dest` is the place to back the folders up to. It consists of the name of the S3 bucket (buckets aren't create automatically), followed by the folder to store objects in.
-
-`exclude` lines specify files/dirs to exclude from the backup.
-See the `--exclude` option to tar.
-
-`pre-backup` and `post-backup` are two hooks, which are run before and after a backup, respectively.
-Note that `post-backup` is only run after a successful command.
-These can be used to do things such as back up a mysql database.
-
-You can have multiple profiles using the same `dest`, and using the same `backup_dir`.
 
 ### Example config file
 
@@ -102,18 +122,17 @@ aws_access_key = ABCD
 aws_secret_access_key = ABCDE
 full_if_older_than = 2W
 remove_all_but_n_full = 5
-
-[profile "www"]
 backup_dir = ~/.backup
-source = /srv/http
 dest = my-backups/tar
 
+[profile "www"]
+source = /srv/http
+
 [profile "home"]
-backup_dir = ~/.backup
 source = ~/
 source = /root
-dest = my-backup/tar
 exclude = .backup
+full_if_older_than = 4W
 ```
 
 Usage
