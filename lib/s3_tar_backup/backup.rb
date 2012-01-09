@@ -69,7 +69,7 @@ module S3TarBackup
 		def self.restore_cmd(restore_into, restore_from, verbose=false)
 			ext = restore_from.match(/[^\.\\\/]+\.(.*)$/)[1]
 			compression_flag = COMPRESSIONS.find{ |k,v| v[:ext] == ext }[1][:flag]
-			"tar x#{verbose ? 'v' : ''}f #{restore_from} #{compression_flag} -G -C #{restore_into}"
+			"tar xp#{verbose ? 'v' : ''}f #{restore_from} #{compression_flag} -G -C #{restore_into}"
 		end
 
 	end
