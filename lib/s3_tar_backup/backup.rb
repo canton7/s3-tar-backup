@@ -61,7 +61,9 @@ module S3TarBackup
 				:date => Time.new(match[2].to_i, match[3].to_i, match[4].to_i, match[5].to_i, match[6].to_i, match[7].to_i),
 				:name => name,
 				:ext => match[9],
-				:size => object.size,
+				:size => object.size.to_i,
+				:profile => match[1],
+				:compression => COMPRESSIONS.find{ |k,v| v[:ext] == match[9] }[0],
 			}
 		end
 

@@ -17,7 +17,8 @@ module S3TarBackup
 				"Usage:\ns3-tar-backup -c config.ini [-p profile] --backup [--full] [-v]\n" \
 				"s3-tar-backup -c config.ini [-p profile] --cleanup [-v]\n" \
 				"s3-tar-backup -c config.ini [-p profile] --restore restore_dir\n\t[--restore_date date] [-v]\n" \
-				"s3-tar-backup -c config.ini [-p profile] --backup-config [--verbose]\n\n" \
+				"s3-tar-backup -c config.ini [-p profile] --backup-config [--verbose]\n" \
+				"s3-tar-backup -c config.ini [-p profile] --list-backups\n\n" \
 				"Option details:\n"
 			opt :config, "Configuration file", :short => 'c', :type => :string, :required => true
 			opt :backup, "Make an incremental backup"
@@ -27,14 +28,17 @@ module S3TarBackup
 			opt :restore, "Restore a backup to the specified dir", :type => :string
 			opt :restore_date, "Restore a backup from the specified date. Format YYYYMM[DD[hh[mm[ss]]]]", :type => :string
 			opt :backup_config, "Backs up the specified configuration file"
+			opt :list_backups, "List the stored backup info for one or more profiles"
 			opt :verbose, "Show verbose output", :short => 'v'
-			conflicts :backup, :cleanup, :restore, :backup_config
+			conflicts :backup, :cleanup, :restore, :backup_config, :list_backups
 		end
 
 
 		Trollop::die "--full requires --backup" if opts[:full] && !opts[:backup]
 		Trollop::die "--restore-date requires --restore" if opts[:restore_date_given] && !opts[:restore_given]
-		Trollop::die "Need one of --backup, --cleanup, --restore, --backup-config" unless opts[:backup] || opts[:cleanup] || opts[:restore_given] || opts[:backup_config]
+		unless opts[:backup] || opts[:cleanup] || opts[:restore_given] || opts[:backup_config] || opts[:list_backups]
+			Trollop::die "Need one of --backup, --cleanup, --restore, --backup-config, --list-backups"
+		end
 
 		begin
 			raise "Config file #{opts[:config]} not found" unless File.exists?(opts[:config])
@@ -66,6 +70,7 @@ module S3TarBackup
 				self.perform_backup(opts, prev_backups, backup_config) if opts[:backup]
 				self.perform_cleanup(prev_backups, backup_config) if opts[:backup] || opts[:cleanup]
 				self.perform_restore(opts, prev_backups, backup_config) if opts[:restore_given]
+				self.perform_list_backups(prev_backups, backup_config) if opts[:list_backups]
 			end
 		rescue Exception => e
 			Trollop::die e.to_s
@@ -240,8 +245,33 @@ module S3TarBackup
 
 			File.delete(dl_file)
 		end
-		#p Backup.restore_cmd(opts[:backup], )
-		#prev_backups.select{ |o| o[:type] == :full && o[:date] < restore_to}[0]
+	end
+
+	def perform_list_backups(prev_backups, backup_config)
+		# prev_backups alreays contains just the files for the current profile
+		puts "===== Backups list for #{backup_config[:name]} ====="
+		puts "Type: N:  Date:#{' '*18}Size:       Chain Size:   Format:\n\n"
+		prev_type = ''
+		total_size = 0
+		chain_length = 0
+		chain_cum_size = 0
+		prev_backups.each do |object|
+			type = object[:type] == prev_type && object[:type] == :incr ? " -- " : object[:type].to_s.capitalize
+			prev_type = object[:type]
+			chain_length += 1
+			chain_length = 0 if object[:type] == :full
+			chain_cum_size = 0 if object[:type] == :full
+			chain_cum_size += object[:size]
+
+			chain_length_str = (chain_length == 0 ? '' : chain_length.to_s).ljust(3)
+			chain_cum_size_str = (object[:type] == :full ? '' : self.bytes_to_human(chain_cum_size)).ljust(8)
+			puts "#{type}  #{chain_length_str} #{object[:date].strftime('%F %T')}    #{self.bytes_to_human(object[:size]).ljust(8)}    " \
+				"#{chain_cum_size_str}      (#{object[:compression]})"
+			total_size += object[:size]
+		end
+		puts "\n"
+		puts "Total size: #{self.bytes_to_human(total_size)}"
+		puts "\n"
 	end
 
 	def parse_objects(bucket, prefix, profile)

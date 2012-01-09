@@ -148,7 +148,7 @@ full_if_older_than = 4W
 Usage
 -----
 
-s3-tar-backup works in three modes: backup, restore, and cleanup.
+s3-tar-backup works in a number of different modes: backup, restore, cleanup, backup-config, list-backups.
 
 ### Backup
 
@@ -208,3 +208,10 @@ Where it is backed up to depends on your setup:
  - If you've specified `dest` under `[settings]`, this location is used
  - If you're only got one profile, and `dest` is under this profile, then this location is used.
  - If you have multiple profiles, and there's no `dest` under `[settings]`, you must specify a profile, and this profile's `dest` will be used.
+ 
+### List backups
+
+```s3-tar-backup --config <config_file> [--profile <profile>] --list-backups [--verbose]
+
+This command is used to view information on the current backed-up archives for the specified profile(s) (or all profiles).
+This is handy if you need to restore a backup, and want to know things such as how much data you'll have to download, or what dates are available to restore from.
