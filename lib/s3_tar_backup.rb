@@ -88,7 +88,7 @@ module S3TarBackup
 			:sources => [*config.get("profile.#{profile}.source", [])] + [*config.get("settings.source", [])],
 			:exclude => [*config.get("profile.#{profile}.exclude", [])] + [*config.get("settings.exclude", [])],
 			:bucket => bucket,
-			:dest_prefix => dest_prefix.chomp('/') << '/',
+			:dest_prefix => dest_prefix.chomp('/'),
 			:pre_backup => [*config.get("profile.#{profile}.pre-backup", [])] + [*config.get('settings.pre-backup', [])],
 			:post_backup => [*config.get("profile.#{profile}.post-backup", [])] + [*config.get('settings.post-backup', [])],
 			:full_if_older_than => config.get("profile.#{profile}.full_if_older_than", false) || config['settings.full_if_older_than'],
