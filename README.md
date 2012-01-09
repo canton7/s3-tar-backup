@@ -54,12 +54,15 @@ dest = <bucket_name>/<path>
 pre-backup = <some command>
 post-backup = <some command>
 
+compression = <compression_type>
+
 ; You have have multiple lines of the following types.
 ; Value from here and from your profiles will be combined
 source = </path/to/another/source>
 source = </path/to/another/source>
 exclude = </some/dir>
 exclude = </some/other/dir>
+
 ```
 
 `aws_access_key_id` and `aws_secret_access_key` are fairly obvious -- you'll have been given these when you signed up for S3.
@@ -76,6 +79,10 @@ The calendar here is unsophisticated: a month is always 30 days, a year is alway
 
 `backup_dir` is the directory used (a) to store temporary data, and (b) to store a record of what files were backed up last time (tar's snar file).
 You can delete this dir at any time, but that will slow down the next backup slightly.
+
+`compression` gives the compression type.
+Valid values are `gzip`, `bzip2`, `lzma`, `lzma2`.
+s3-tar-backup is capable of auto-detecting the format of a previously-backed-up archive, and so changing this value will not invalidate previous backup.
 
 `source` contains the folders to be backed up.
 

@@ -76,7 +76,7 @@ module S3TarBackup
 			:full_if_older_than => config.get("profile.#{profile}.full_if_older_than", false) || config['settings.full_if_older_than'],
 			:remove_older_than => config.get("profile.#{profile}.remove_older_than", false) || config.get('settings.remove_older_than', false),
 			:remove_all_but_n_full => config.get("profile.#{profile}.remove_all_but_n_full", false) || config.get('settings.remove_all_but_n_full', false),
-
+			:compression => (config.get("profile.#{profile}.compression", false) || config.get('settings.compression', 'gzip')).to_sym
 		}
 		backup_config
 	end
@@ -129,7 +129,7 @@ module S3TarBackup
 	# backup_dir, name, soruces, exclude, bucket, dest_prefix
 	def backup_incr(config, verbose=false)
 		puts "Starting new incremental backup"
-		backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude])
+		backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude], config[:compression])
 
 		# Try and get hold of the snar file
 		unless backup.snar_exists?
@@ -152,7 +152,7 @@ module S3TarBackup
 
 	def backup_full(config, verbose=false)
 		puts "Starting new full backup"
-		backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude])
+		backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude], config[:compression])
 		# Nuke the snar file -- forces a full backup
 		File.delete(backup.snar_path) if File.exists?(backup.snar_path)
 		self.backup(config, backup, verbose)
@@ -217,7 +217,7 @@ module S3TarBackup
 					f.write(chunk)
 				end
 			end
-
+			puts "Extracting..."
 			system(Backup.restore_cmd(restore_dir, dl_file, opts[:verbose]))
 
 			File.delete(dl_file)
