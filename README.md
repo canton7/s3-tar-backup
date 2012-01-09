@@ -192,3 +192,16 @@ Using `<restore_date>`, you can tell s3-tar-backup to restore the first backup b
 The date format to use is `YYYYMM[DD[hh[mm[ss]]]]`, for example `20110406` means `2011-04-06 00:00:00`, while `201104062143` means `2011-04-06 21:43:00`.
 
 `--verbose` makes tar spit out the files that it restores.
+
+### Backup Config file
+
+```
+s3-tar-backup --config <config_file> [--profile <profile>] --backup-config [--verbose]
+```
+
+This command is used to backup the specified configuration file.
+Where it is backed up to depends on your setup: 
+
+ - If you've specified `dest` under `[settings]`, this location is used
+ - If you're only got one profile, and `dest` is under this profile, then this location is used.
+ - If you have multiple profiles, and there's no `dest` under `[settings]`, you must specify a profile, and this profile's `dest` will be used.

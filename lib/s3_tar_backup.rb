@@ -14,9 +14,10 @@ module S3TarBackup
 		opts = Trollop::options do
 			version VERSION
 			banner "Backs up files to, and restores files from, Amazon's S3 storage, using tar incremental backups\n\n" \
-				"Usage:\ns3-tar-backup -c config.ini -p profile --backup [--full] [-v]\n" \
-				"s3-tar-backup -c config.ini -p profile --cleanup [-v]\n" \
-				"s3-tar-backup -c config.ini -p profile --restore restore_dir\n\t[--restore_date date] [-v]\n\n" \
+				"Usage:\ns3-tar-backup -c config.ini [-p profile] --backup [--full] [-v]\n" \
+				"s3-tar-backup -c config.ini [-p profile] --cleanup [-v]\n" \
+				"s3-tar-backup -c config.ini [-p profile] --restore restore_dir\n\t[--restore_date date] [-v]\n" \
+				"s3-tar-backup -c config.ini [-p profile] --backup-config [--verbose]\n\n" \
 				"Option details:\n"
 			opt :config, "Configuration file", :short => 'c', :type => :string, :required => true
 			opt :backup, "Make an incremental backup"
@@ -25,20 +26,34 @@ module S3TarBackup
 			opt :cleanup, "Clean up old backups"
 			opt :restore, "Restore a backup to the specified dir", :type => :string
 			opt :restore_date, "Restore a backup from the specified date. Format YYYYMM[DD[hh[mm[ss]]]]", :type => :string
+			opt :backup_config, "Backs up the specified configuration file"
 			opt :verbose, "Show verbose output", :short => 'v'
-			conflicts :backup, :cleanup, :restore
+			conflicts :backup, :cleanup, :restore, :backup_config
 		end
 
 
 		Trollop::die "--full requires --backup" if opts[:full] && !opts[:backup]
 		Trollop::die "--restore-date requires --restore" if opts[:restore_date_given] && !opts[:restore_given]
-		Trollop::die "Need one of --backup, --cleanup, --restore" unless opts[:backup] || opts[:cleanup] || opts[:restore_given]
+		Trollop::die "Need one of --backup, --cleanup, --restore, --backup-config" unless opts[:backup] || opts[:cleanup] || opts[:restore_given] || opts[:backup_config]
 
 		begin
 			raise "Config file #{opts[:config]} not found" unless File.exists?(opts[:config])
 			config = IniParser.new(opts[:config]).load
 			profiles = opts[:profile] || config.find_sections(/^profile\./).keys.map{ |k| k.to_s.split('.', 2)[1] }
 			self.connect_s3(config['settings.aws_access_key_id'], config['settings.aws_secret_access_key'])
+
+			# This is a bit of a special case
+			if opts[:backup_config]
+				dest = config.get('settings.dest', false)
+				raise "You must specify a single profile (used to determine the location to back up to) " \
+					"if backing up config and dest key is not in [settings]" if !dest && profiles.count != 1
+				dest ||= config["profile.#{profiles[0]}.dest"]
+				puts "===== Backing up config file #{opts[:config]} ====="
+				bucket, prefix = (config.get('settings.dest', false) || config["profile.#{profiles[0]}.dest"]).split('/', 2)
+				puts "Uploading #{opts[:config]} to #{bucket}/#{prefix}/#{File.basename(opts[:config])}"
+				self.upload(opts[:config], bucket, "#{prefix}/#{File.basename(opts[:config])}")
+				return
+			end
 
 			profiles.dup.each do |profile|
 				raise "No such profile: #{profile}" unless config.has_section?("profile.#{profile}")
