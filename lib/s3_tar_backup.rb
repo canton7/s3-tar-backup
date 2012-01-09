@@ -178,7 +178,7 @@ module S3TarBackup
 
 	def backup(config, backup, verbose=false)
 		system(backup.backup_cmd(verbose))
-		puts "Uploading backup #{File.basename(backup.archive)}"
+		puts "Uploading backup #{File.basename(backup.archive)} to #{config[:bucket]}/#{config[:dest_prefix]}/"
 		self.upload(backup.archive, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.archive)}")
 		puts "Uploading snar"
 		self.upload(backup.snar_path, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.snar)}")
@@ -228,7 +228,7 @@ module S3TarBackup
 		raise "Detination dir is not a directory" unless File.directory?(restore_dir)
 
 		prev_backups[restore_start_index..restore_end_index].each do |object|
-			puts "Fetching #{object[:name]}"
+			puts "Fetching #{object[:name]} from #{backup_config[:bucket]}/#{backup_config[:dest_prefix]}/"
 			dl_file = "#{backup_config[:backup_dir]}/#{object[:name]}"
 			open(dl_file, 'wb') do |f|
 				S3::S3Object.stream("#{backup_config[:dest_prefix]}/#{object[:name]}", backup_config[:bucket]) do |chunk|
