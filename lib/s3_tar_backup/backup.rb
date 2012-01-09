@@ -52,7 +52,8 @@ module S3TarBackup
 			"tar c#{verbose ? 'v' : ''}f \"#{@archive}\" #{@compression_flag} -g \"#{snar_path}\" --exclude #{exclude} --no-check-device #{sources}"
 		end
 
-		def self.parse_name(name, profile)
+		def self.parse_object(object, profile)
+			name = File.basename(object.path)
 			match = name.match(/^backup-([^\-]+)-(\d\d\d\d)(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)-([^\.]+)\.(.*)$/)
 			return nil unless match && match[1] == profile
 			return {
@@ -60,6 +61,7 @@ module S3TarBackup
 				:date => Time.new(match[2].to_i, match[3].to_i, match[4].to_i, match[5].to_i, match[6].to_i, match[7].to_i),
 				:name => name,
 				:ext => match[9],
+				:size => object.size,
 			}
 		end
 

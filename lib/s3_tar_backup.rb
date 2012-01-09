@@ -178,9 +178,9 @@ module S3TarBackup
 
 	def backup(config, backup, verbose=false)
 		system(backup.backup_cmd(verbose))
-		puts "Uploading backup #{File.basename(backup.archive)} to #{config[:bucket]}/#{config[:dest_prefix]}/"
+		puts "Uploading #{config[:bucket]}/#{config[:dest_prefix]}/#{File.basename(backup.archive)} (#{self.bytes_to_human(File.size(backup.archive))})"
 		self.upload(backup.archive, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.archive)}")
-		puts "Uploading snar"
+		puts "Uploading snar (#{self.bytes_to_human(File.size(backup.snar_path))})"
 		self.upload(backup.snar_path, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.snar)}")
 		File.delete(backup.archive)
 	end
@@ -228,7 +228,7 @@ module S3TarBackup
 		raise "Detination dir is not a directory" unless File.directory?(restore_dir)
 
 		prev_backups[restore_start_index..restore_end_index].each do |object|
-			puts "Fetching #{object[:name]} from #{backup_config[:bucket]}/#{backup_config[:dest_prefix]}/"
+			puts "Fetching #{backup_config[:bucket]}/#{backup_config[:dest_prefix]}/#{object[:name]} (#{self.bytes_to_human(object[:size])})"
 			dl_file = "#{backup_config[:backup_dir]}/#{object[:name]}"
 			open(dl_file, 'wb') do |f|
 				S3::S3Object.stream("#{backup_config[:dest_prefix]}/#{object[:name]}", backup_config[:bucket]) do |chunk|
@@ -247,7 +247,7 @@ module S3TarBackup
 	def parse_objects(bucket, prefix, profile)
 		objects = []
 		S3::Bucket.objects(bucket, :prefix => prefix).each do |object|
-			objects << Backup.parse_name(File.basename(object.path), profile)
+			objects << Backup.parse_object(object, profile)
 		end
 		objects.compact.sort_by{ |o| o[:date] }
 	end
@@ -267,6 +267,15 @@ module S3TarBackup
 	def full_required?(interval_str, objects)
 		time = self.parse_interval(interval_str)
 		objects.select{ |o| o[:type] == :full && o[:date] > time }.empty?
+	end
+
+	def bytes_to_human(n)
+		count = 0
+		while n >= 1014 && count < 4
+			n /= 1024.0
+			count += 1
+		end
+		format("%.2f", n) << %w(B KB MB GB TB)[count]
 	end
 
 end
