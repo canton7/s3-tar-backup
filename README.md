@@ -38,6 +38,7 @@ With the exception of two keys, every configuration key can be specified either 
 ```ini
 [settings]
 ; These two keys must be located in this section
+; You can use environmental variables instead of these -- see below
 aws_access_key_id = <your aws access key>
 aws_secret_access_key = <your aws secret key>
 
@@ -67,6 +68,7 @@ exclude = </some/other/dir>
 
 `aws_access_key_id` and `aws_secret_access_key` are fairly obvious -- you'll have been given these when you signed up for S3.
 If you can't find them, [look here](http://aws.amazon.com/security-credentials).
+You can use the environmental variables AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY instead if you prefer -- the env vars will override the config options.
 
 `full_if_older_than` tells s3-tar-backup how long if should leave between full backups.  
 `<timespec>` is stolen from duplicity. It is given as an interval, which is a number followed by one of the characers s, m, h, D, W, M, or Y (indicating seconds, minutes, hours, days, weeks, months, or years respectively), or a series of such pairs.

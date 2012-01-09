@@ -40,7 +40,10 @@ module S3TarBackup
 			raise "Config file #{opts[:config]} not found" unless File.exists?(opts[:config])
 			config = IniParser.new(opts[:config]).load
 			profiles = opts[:profile] || config.find_sections(/^profile\./).keys.map{ |k| k.to_s.split('.', 2)[1] }
-			self.connect_s3(config['settings.aws_access_key_id'], config['settings.aws_secret_access_key'])
+			self.connect_s3(
+				ENV['AWS_ACCESS_KEY_ID'] || config['settings.aws_access_key_id'],
+				ENV['AWS_SECRET_ACCESS_KEY'] || config['settings.aws_secret_access_key']
+			)
 
 			# This is a bit of a special case
 			if opts[:backup_config]
