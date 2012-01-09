@@ -39,7 +39,7 @@ module S3TarBackup
 			config_lines.each do |line|
 				case line.chomp
 				# Section
-				when /^\[(\S+)(?: "(\S+)")?\]$/
+				when /^\[([\w\-]+)(?: "([\w\-]+)")?\]$/
 					section = $1.chomp
 					section << ".#{$2.chomp}" if $2
 					section = section.to_sym
@@ -47,7 +47,7 @@ module S3TarBackup
 					comments[section] = {} unless comments.has_key?(section)
 					next_comment = {:before => [], :after => nil}
 					# key line
-				when /^(\S+)\s*=\s*([^;]*?)\s*(?:;\s+(.*))?$/
+				when /^([\w\-]+)\s*=\s*([^;]*?)\s*(?:;\s+(.*))?$/
 					raise "Config key before section" unless section
 					key = $1.chomp.to_sym
 					if config[section].has_key?(key)
