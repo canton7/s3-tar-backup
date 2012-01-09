@@ -54,7 +54,7 @@ module S3TarBackup
 
 		def self.parse_object(object, profile)
 			name = File.basename(object.path)
-			match = name.match(/^backup-([^\-]+)-(\d\d\d\d)(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)-([^\.]+)\.(.*)$/)
+			match = name.match(/^backup-([\w\-]+)-(\d\d\d\d)(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)-(\w+)\.(.*)$/)
 			return nil unless match && match[1] == profile
 			return {
 				:type => match[8].to_sym,
