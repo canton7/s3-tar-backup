@@ -57,6 +57,8 @@ post-backup = <some command>
 
 compression = <compression_type>
 
+always_full = <bool>
+
 ; You have have multiple lines of the following types.
 ; Value from here and from your profiles will be combined
 source = </path/to/another/source>
@@ -82,23 +84,26 @@ The calendar here is unsophisticated: a month is always 30 days, a year is alway
 `backup_dir` is the directory used (a) to store temporary data, and (b) to store a record of what files were backed up last time (tar's snar file).
 You can delete this dir at any time, but that will slow down the next backup slightly.
 
-`compression` gives the compression type.
-Valid values are `gzip`, `bzip2`, `lzma`, `lzma2`.
-s3-tar-backup is capable of auto-detecting the format of a previously-backed-up archive, and so changing this value will not invalidate previous backup.
-
-`source` contains the folders to be backed up.
-
-`dest` is the place to back the folders up to. It consists of the name of the S3 bucket (buckets aren't create automatically), followed by the folder to store objects in, for example `my-backups/tar/`
-
-`exclude` lines specify files/dirs to exclude from the backup.
-See the `--exclude` option to tar.
-The exclude lines are optional -- you can have no exclude lines anywhere in your config if you wish.
+`dest` is the place to back the folders up to. It consists of the name of the S3 bucket (buckets aren't create automatically), followed by the folder to store objects in, for example `my-backups/tar/`.
 
 `pre-backup` and `post-backup` are two hooks, which are run before and after a backup, respectively.
 These lines are optional -- you can have no pre-backup or post-backup lines anywhere in your config if you wish.
 Note that `post-backup` is only run after a successful command.
 These can be used to do things such as back up a mysql database.
 Note that you can have multiple `pre-backup` and `post-backup` lines -- all of the listed commands will be executed.
+
+`compression` gives the compression type.
+Valid values are `gzip`, `bzip2`, `lzma`, `lzma2`.
+s3-tar-backup is capable of auto-detecting the format of a previously-backed-up archive, and so changing this value will not invalidate previous backup.
+
+`always_full` is an optional key which have have the value `True` or `False`.
+This is used to say that incremental backups should never be used, and is probably only useful when specified inside a profile.
+
+`source` contains the folders to be backed up.
+
+`exclude` lines specify files/dirs to exclude from the backup.
+See the `--exclude` option to tar.
+The exclude lines are optional -- you can have no exclude lines anywhere in your config if you wish.
 
 **Note:** You can have multiple profiles using the same `dest`, and using the same `backup_dir`.
 
@@ -143,6 +148,12 @@ source = ~/
 source = /root
 exclude = .backup
 full_if_older_than = 4W
+
+[profile "mysql"]
+pre-backup = mysqldump -uuser -ppassword --all-databases > /tmp/mysql_dump.sql
+source = /tmp/mysql_dump.sql
+post-backup = rm /tmp/mysql_dump.sql
+always_full = True
 ```
 
 Usage

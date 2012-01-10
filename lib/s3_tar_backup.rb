@@ -66,7 +66,7 @@ module S3TarBackup
 				raise "No such profile: #{profile}" unless config.has_section?("profile.#{profile}")
 				opts[:profile] = profile
 				backup_config = self.gen_backup_config(opts[:profile], config)
-				prev_backups = self.parse_objects(backup_config[:bucket], backup_config[:dest_prefix], opts[:profile])
+				prev_backups = self.get_objects(backup_config[:bucket], backup_config[:dest_prefix], opts[:profile])
 				self.perform_backup(opts, prev_backups, backup_config) if opts[:backup]
 				self.perform_cleanup(prev_backups, backup_config) if opts[:backup] || opts[:cleanup]
 				self.perform_restore(opts, prev_backups, backup_config) if opts[:restore_given]
@@ -99,7 +99,8 @@ module S3TarBackup
 			:full_if_older_than => config.get("profile.#{profile}.full_if_older_than", false) || config['settings.full_if_older_than'],
 			:remove_older_than => config.get("profile.#{profile}.remove_older_than", false) || config.get('settings.remove_older_than', false),
 			:remove_all_but_n_full => config.get("profile.#{profile}.remove_all_but_n_full", false) || config.get('settings.remove_all_but_n_full', false),
-			:compression => (config.get("profile.#{profile}.compression", false) || config.get('settings.compression', 'gzip')).to_sym
+			:compression => (config.get("profile.#{profile}.compression", false) || config.get('settings.compression', 'gzip')).to_sym,
+			:always_full => config.get('settings.always_full', false) || config.get("profile.#{profile}.always_full", false),
 		}
 		backup_config
 	end
@@ -111,8 +112,8 @@ module S3TarBackup
 			system(cmd)
 		end
 		full_required = self.full_required?(backup_config[:full_if_older_than], prev_backups)
-		puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full_backup]
-		if full_required || opts[:full]
+		puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full] && backup_config[:always_full]
+		if full_required || opts[:full] || backup_config[:always_full]
 			self.backup_full(backup_config, opts[:verbose])
 		else
 			self.backup_incr(backup_config, opts[:verbose])
@@ -274,7 +275,7 @@ module S3TarBackup
 		puts "\n"
 	end
 
-	def parse_objects(bucket, prefix, profile)
+	def get_objects(bucket, prefix, profile)
 		objects = []
 		S3::Bucket.objects(bucket, :prefix => prefix).each do |object|
 			objects << Backup.parse_object(object, profile)
