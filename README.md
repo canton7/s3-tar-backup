@@ -222,7 +222,9 @@ Where it is backed up to depends on your setup:
  
 ### List backups
 
-```s3-tar-backup --config <config_file> [--profile <profile>] --list-backups [--verbose]
+```
+s3-tar-backup --config <config_file> [--profile <profile>] --list-backups [--verbose]
+```
 
 This command is used to view information on the current backed-up archives for the specified profile(s) (or all profiles).
 This is handy if you need to restore a backup, and want to know things such as how much data you'll have to download, or what dates are available to restore from.
