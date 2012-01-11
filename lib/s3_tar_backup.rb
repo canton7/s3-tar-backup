@@ -131,8 +131,10 @@ module S3TarBackup
 			age = self.parse_interval(age_str)
 			remove = prev_backups.select{ |o| o[:date] < age }
 			# Don't want to delete anything before the last full backup
-			removed = remove.slice!(remove.rindex{ |o| o[:type] == :full }..-1).count
-			puts "Keeping #{removed} old backups as part of a chain"
+			unless remove.empty?
+				removed = remove.slice!(remove.rindex{ |o| o[:type] == :full }..-1).count
+				puts "Keeping #{removed.count} old backups as part of a chain" unless removed.empty?
+			end
 		elsif keep_n = backup_config[:remove_all_but_n_full]
 			keep_n = keep_n.to_i
 			# Get the date of the last full backup to keep
@@ -141,9 +143,12 @@ module S3TarBackup
 				remove = prev_backups.select{ |o| o[:date] < last_full_to_keep[:date] }
 			end
 		end
-		return if remove.empty?
 
-		puts "Removing #{remove.count} old backup files"
+		if remove.empty?
+			puts "Nothing to do"
+		else
+			puts "Removing #{remove.count} old backup files"
+		end
 		remove.each do |object|
 			S3::S3Object.delete("#{backup_config[:dest_prefix]}/#{object[:name]}", backup_config[:bucket])
 		end
