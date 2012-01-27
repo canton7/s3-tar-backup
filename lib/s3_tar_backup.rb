@@ -202,10 +202,10 @@ module S3TarBackup
 			open(source) do |f|
 				S3::S3Object.store(dest_name, f, bucket)
 			end
-		rescue S3::S3Exception => e
+		rescue Errno::ECONNRESET => e
 			tries += 1
 			if tries < UPLOAD_TRIES
-				puts "S3 Exception: #{e}"
+				puts "Upload Exception: #{e}"
 				puts "Retrying #{tries}/#{UPLOAD_TRIES}..."
 				retry
 			else
