@@ -204,7 +204,7 @@ module S3TarBackup
 			end
 		rescue Errno::ECONNRESET => e
 			tries += 1
-			if tries < UPLOAD_TRIES
+			if tries <= UPLOAD_TRIES
 				puts "Upload Exception: #{e}"
 				puts "Retrying #{tries}/#{UPLOAD_TRIES}..."
 				retry
@@ -212,7 +212,7 @@ module S3TarBackup
 				raise e
 			end
 		end
-
+		puts "Succeeded" if tries > 0
 	end
 
 	def perform_restore(opts, prev_backups, backup_config)
