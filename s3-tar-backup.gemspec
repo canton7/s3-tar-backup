@@ -12,7 +12,7 @@ spec = Gem::Specification.new do |s|
   s.required_ruby_version = '>= 1.9.2'
 	s.homepage = 'http://github.com/canton7/s3-tar-backup'
 
-  s.add_dependency 'aws-sdk'
+  s.add_dependency 'aws-sdk', '~> 1.0'
 
   s.executables  = ['s3-tar-backup']
 
