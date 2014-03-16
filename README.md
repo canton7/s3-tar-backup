@@ -15,10 +15,11 @@ In practice, it turns out that this tool has few lower bandwidth and CPU require
 Installation
 ------------
 
-This tool is not yet a ruby gem, and unless people ask me, it will remain that way.
+This tool is available as a ruby gem, or you can build it youself.
 
-Therefore, to install:
+To install from rubygems: `gem install s3-tar-backup`.
 
+To build it yourself:
 ```
 $ git clone git://github.com/canton7/s3-tar-backup.git
 $ cd s3-tar-backup
