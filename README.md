@@ -44,6 +44,10 @@ With the exception of two keys, every configuration key can be specified either 
 aws_access_key_id = <your aws access key>
 aws_secret_access_key = <your aws secret key>
 
+; Set this to the AWS region you want to use
+; See http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region
+aws_region = <your aws region>
+
 ; The rest of the keys can either be located here, or in your profiles, or both
 ; The value from the profile will replace the value specified here
 full_if_older_than = <timespec>
@@ -137,6 +141,7 @@ post-backup = <some command>
 [settings]
 aws_access_key = ABCD
 aws_secret_access_key = ABCDE
+aws_region = eu-west-1
 ; Do a new full backup every 2 weeks
 full_if_older_than = 2W
 ; Keep 5 sets of full backups
