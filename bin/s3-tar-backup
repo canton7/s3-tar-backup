@@ -4,4 +4,4 @@ $LOAD_PATH.unshift File.expand_path(File.dirname($PROGRAM_NAME)+File::SEPARATOR+
 
 require 's3_tar_backup'
 
-S3TarBackup::run
+S3TarBackup::Main.new.run

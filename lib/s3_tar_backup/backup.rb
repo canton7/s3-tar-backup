@@ -25,6 +25,8 @@ module S3TarBackup
 			@compression_flag = COMPRESSIONS[compression][:flag]
 			@compression_ext = COMPRESSIONS[compression][:ext]
 			@time = Time.now
+
+			Dir.mkdir(@backup_dir) unless File.directory?(@backup_dir)
 		end
 
 		def snar
@@ -53,7 +55,7 @@ module S3TarBackup
 		end
 
 		def self.parse_object(object, profile)
-			name = File.basename(object.path)
+			name = File.basename(object.key)
 			match = name.match(/^backup-([\w\-]+)-(\d\d\d\d)(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)-(\w+)\.(.*)$/)
 			return nil unless match && match[1] == profile
 			return {
@@ -61,7 +63,7 @@ module S3TarBackup
 				:date => Time.new(match[2].to_i, match[3].to_i, match[4].to_i, match[5].to_i, match[6].to_i, match[7].to_i),
 				:name => name,
 				:ext => match[9],
-				:size => object.size.to_i,
+				:size => object.content_length,
 				:profile => match[1],
 				:compression => COMPRESSIONS.find{ |k,v| v[:ext] == match[9] }[0],
 			}
