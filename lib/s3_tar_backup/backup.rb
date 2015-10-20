@@ -48,10 +48,10 @@ module S3TarBackup
 		end
 
 		def backup_cmd(verbose=false)
-			exclude = @exclude.map{ |e| "\"#{e}\""}.join(' ')
+			exclude = @exclude.map{ |e| "--exclude \"#{e}\""}.join(' ')
 			sources = @sources.map{ |s| "\"#{s}\""}.join(' ')
 			@archive = archive
-			"tar c#{verbose ? 'v' : ''}f \"#{@archive}\" #{@compression_flag} -g \"#{snar_path}\" --exclude #{exclude} --no-check-device #{sources}"
+			"tar c#{verbose ? 'v' : ''}f \"#{@archive}\" #{@compression_flag} -g \"#{snar_path}\" #{exclude} --no-check-device #{sources}"
 		end
 
 		def self.parse_object(object, profile)
