@@ -312,7 +312,7 @@ module S3TarBackup
 		end
 
 		def exec(cmd)
-			puts "Executing #{cmd}"
+			puts "Executing: #{cmd}"
 			system(cmd)
 		end
 	end
