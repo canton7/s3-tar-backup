@@ -15,5 +15,5 @@ end
 
 desc "Install gem locally"
 task :install => :build do
-  system "gem install #{spec.name}-#{spec.version}"
+  system "gem install #{spec.name}-#{spec.version}.gem"
 end
