@@ -106,7 +106,7 @@ module S3TarBackup
 			puts "===== Backing up profile #{backup_config[:name]} ====="
 			backup_config[:pre_backup].each_with_index do |cmd, i|
 				puts "Executing pre-backup hook #{i+1}"
-				system(cmd)
+				exec(cmd)
 			end
 			full_required = full_required?(backup_config[:full_if_older_than], prev_backups)
 			puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full] && backup_config[:always_full]
@@ -117,7 +117,7 @@ module S3TarBackup
 			end
 			backup_config[:post_backup].each_with_index do |cmd, i|
 				puts "Executing post-backup hook #{i+1}"
-				system(cmd)
+				exec(cmd)
 			end
 		end
 
@@ -186,7 +186,7 @@ module S3TarBackup
 		end
 
 		def backup(config, backup, verbose=false)
-			system(backup.backup_cmd(verbose))
+			exec(backup.backup_cmd(verbose))
 			puts "Uploading #{config[:bucket]}/#{config[:dest_prefix]}/#{File.basename(backup.archive)} (#{bytes_to_human(File.size(backup.archive))})"
 			upload(backup.archive, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.archive)}")
 			puts "Uploading snar (#{bytes_to_human(File.size(backup.snar_path))})"
@@ -243,7 +243,7 @@ module S3TarBackup
 					end
 				end
 				puts "Extracting..."
-				system(Backup.restore_cmd(restore_dir, dl_file, opts[:verbose]))
+				exec(Backup.restore_cmd(restore_dir, dl_file, opts[:verbose]))
 
 				File.delete(dl_file)
 			end
@@ -307,6 +307,11 @@ module S3TarBackup
 				count += 1
 			end
 			format("%.2f", n) << %w(B KB MB GB TB)[count]
+		end
+
+		def exec(cmd)
+			puts "Executing #{cmd}"
+			system(cmd)
 		end
 	end
 end
