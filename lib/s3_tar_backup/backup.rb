@@ -82,7 +82,7 @@ module S3TarBackup
 		def self.restore_cmd(restore_into, restore_from, verbose=false)
 			ext, encrypted = restore_from.match(/[^\.\\\/]+\.(.*?)(\.#{ENCRYPTED_EXTENSION})?$/)[1..2]
 			compression_flag = COMPRESSIONS.find{ |k,v| v[:ext] == ext }[1][:flag]
-			tar_archive = encrypted ? '' : "f \#{restore_from}\""
+			tar_archive = encrypted ? '' : "f \"#{restore_from}\""
 			gpg_cmd = encrypted ? "gpg --yes --batch --no-tty -d \"#{restore_from}\" | " : ''
 			"#{gpg_cmd}tar xp#{verbose ? 'v' : ''}#{tar_archive} #{compression_flag} -G -C #{restore_into}"
 		end
