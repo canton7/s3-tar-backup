@@ -149,6 +149,18 @@ gpg_key = <key ID>
 
 `profile_name` is the name of the profile. You'll use this later.
 
+### Encryption
+
+`s3-tar-backup` will encrypt your backups if you specify the config key `gpg_key`, which is the ID of the key to use for encrypting backups. 
+In order to create an encrypted backup, the public key with this ID must exist in your keyring: it doesn't matter if it has a passphrase or not.
+In order to restore an encrypted backup, the private key corresponding to the public key which encrypted the backup must exist in your keyring: your `gpg-agent` will prompt you for the passphrase if required.
+The `gpg_key` option is not used when restoring from backup (instead gpg works out which key to use to decrypt the backup by looking at the backup itself), which means that you can safely change the key that `s3-tar-backup` uses to encrypt backups without losing access to older backups.
+
+`s3-tar-backup` works out whether or not to try and decrypt a backup by looking at its file extension, which means you can safely enable or disable encryption without losing access to older backups.
+
+To create a key, run `gpg --gen-key`, and follow the prompts.
+Make sure you create a backup of the private key using `gpg -a --export-secret-keys <key ID> > s3-tar-backup-secret-key.asc`.
+
 ### Example config file
 
 ```ini
