@@ -9,6 +9,7 @@ You can then restore the files at a later date.
 
 This tool was built as a replacement for duplicity, after duplicity started throwing errors and generally being a bit unreliable.
 It uses command-line tar to create incremental backup snapshots, and the aws-s3 gem to upload these to S3.
+It can also optionally use command-ling gpg to encrypt backups.
 
 In practice, it turns out that this tool has few lower bandwidth and CPU requirements, and can restore a backup in a fraction of the time that duplicity would take.
 
@@ -59,12 +60,19 @@ remove_all_but_n_full = <number>
 
 backup_dir = </path/to/dir>
 dest = <bucket_name>/<path>
+
+; Optional: specifies commands to run before and after each backup
 pre-backup = <some command>
 post-backup = <some command>
 
+; Optional: defaults to bzip2
 compression = <compression_type>
 
+; Optional: defaults to false
 always_full = <bool>
+
+; Optional: defaults to no key
+gpg_key = <key ID>
 
 ; You have have multiple lines of the following types.
 ; Values from here and from your profiles will be combined
@@ -106,6 +114,10 @@ s3-tar-backup is capable of auto-detecting the format of a previously-backed-up 
 `always_full` is an optional key which have have the value `True` or `False`.
 This is used to say that incremental backups should never be used.
 
+`gpg_key` is an optional GPG Key ID to use to encrypt backups.
+This key must exist in your keyring.
+By default, no key is used and backups are not encrypted.
+
 `source` contains the folders to be backed up.
 
 `exclude` lines specify files/dirs to exclude from the backup.
@@ -132,6 +144,7 @@ dest = <bucket_name>/<path>
 exclude = </some/dir>
 pre-backup = <some command>
 post-backup = <some command>
+gpg_key = <key ID>
 ```
 
 `profile_name` is the name of the profile. You'll use this later.
@@ -151,9 +164,12 @@ backup_dir = /root/.backup
 dest = my-backups/tar
 ; You may prefer bzip2, as it has a much lower CPU cost
 compression = lzma2
+gpg_key = ABCD1234
 
 [profile "www"]
 source = /srv/http
+; Don't encrypt this (for some reason)
+gpg_key =
 
 [profile "home"]
 source = /home/me
