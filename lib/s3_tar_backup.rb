@@ -84,9 +84,11 @@ module S3TarBackup
 
 		def gen_backup_config(profile, config)
 			bucket, dest_prefix = (config.get("profile.#{profile}.dest", false) || config['settings.dest']).split('/', 2)
+			gpg_key = config.get("profile.#{profile}.gpg_key", false) || config['settings.gpg_key']
 			backup_config = {
 				:backup_dir => config.get("profile.#{profile}.backup_dir", false) || config['settings.backup_dir'],
 				:name => profile,
+				:gpg_key => gpg_key && !gpg_key.empty? ? gpg_key : nil,
 				:sources => [*config.get("profile.#{profile}.source", [])] + [*config.get("settings.source", [])],
 				:exclude => [*config.get("profile.#{profile}.exclude", [])] + [*config.get("settings.exclude", [])],
 				:bucket => bucket,
@@ -96,7 +98,7 @@ module S3TarBackup
 				:full_if_older_than => config.get("profile.#{profile}.full_if_older_than", false) || config['settings.full_if_older_than'],
 				:remove_older_than => config.get("profile.#{profile}.remove_older_than", false) || config.get('settings.remove_older_than', false),
 				:remove_all_but_n_full => config.get("profile.#{profile}.remove_all_but_n_full", false) || config.get('settings.remove_all_but_n_full', false),
-				:compression => (config.get("profile.#{profile}.compression", false) || config.get('settings.compression', 'gzip')).to_sym,
+				:compression => (config.get("profile.#{profile}.compression", false) || config.get('settings.compression', 'bzip2')).to_sym,
 				:always_full => config.get('settings.always_full', false) || config.get("profile.#{profile}.always_full", false),
 			}
 			backup_config
@@ -106,7 +108,7 @@ module S3TarBackup
 			puts "===== Backing up profile #{backup_config[:name]} ====="
 			backup_config[:pre_backup].each_with_index do |cmd, i|
 				puts "Executing pre-backup hook #{i+1}"
-				system(cmd)
+				exec(cmd)
 			end
 			full_required = full_required?(backup_config[:full_if_older_than], prev_backups)
 			puts "Last full backup is too old. Forcing a full backup" if full_required && !opts[:full] && backup_config[:always_full]
@@ -117,7 +119,7 @@ module S3TarBackup
 			end
 			backup_config[:post_backup].each_with_index do |cmd, i|
 				puts "Executing post-backup hook #{i+1}"
-				system(cmd)
+				exec(cmd)
 			end
 		end
 
@@ -155,7 +157,7 @@ module S3TarBackup
 		# backup_dir, name, soruces, exclude, bucket, dest_prefix
 		def backup_incr(config, verbose=false)
 			puts "Starting new incremental backup"
-			backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude], config[:compression])
+			backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude], config[:compression], config[:gpg_key])
 
 			# Try and get hold of the snar file
 			unless backup.snar_exists?
@@ -179,14 +181,14 @@ module S3TarBackup
 
 		def backup_full(config, verbose=false)
 			puts "Starting new full backup"
-			backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude], config[:compression])
+			backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude], config[:compression], config[:gpg_key])
 			# Nuke the snar file -- forces a full backup
 			File.delete(backup.snar_path) if File.exists?(backup.snar_path)
 			backup(config, backup, verbose)
 		end
 
 		def backup(config, backup, verbose=false)
-			system(backup.backup_cmd(verbose))
+			exec(backup.backup_cmd(verbose))
 			puts "Uploading #{config[:bucket]}/#{config[:dest_prefix]}/#{File.basename(backup.archive)} (#{bytes_to_human(File.size(backup.archive))})"
 			upload(backup.archive, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.archive)}")
 			puts "Uploading snar (#{bytes_to_human(File.size(backup.snar_path))})"
@@ -232,7 +234,7 @@ module S3TarBackup
 			restore_dir = opts[:restore].chomp('/') << '/'
 
 			Dir.mkdir(restore_dir) unless Dir.exists?(restore_dir)
-			raise "Detination dir is not a directory" unless File.directory?(restore_dir)
+			raise "Destination dir is not a directory" unless File.directory?(restore_dir)
 
 			prev_backups[restore_start_index..restore_end_index].each do |object|
 				puts "Fetching #{backup_config[:bucket]}/#{backup_config[:dest_prefix]}/#{object[:name]} (#{bytes_to_human(object[:size])})"
@@ -243,7 +245,7 @@ module S3TarBackup
 					end
 				end
 				puts "Extracting..."
-				system(Backup.restore_cmd(restore_dir, dl_file, opts[:verbose]))
+				exec(Backup.restore_cmd(restore_dir, dl_file, opts[:verbose]))
 
 				File.delete(dl_file)
 			end
@@ -252,7 +254,7 @@ module S3TarBackup
 		def perform_list_backups(prev_backups, backup_config)
 			# prev_backups alreays contains just the files for the current profile
 			puts "===== Backups list for #{backup_config[:name]} ====="
-			puts "Type: N:  Date:#{' '*18}Size:       Chain Size:   Format:\n\n"
+			puts "Type: N:  Date:#{' '*18}Size:       Chain Size:   Format:   Encrypted:\n\n"
 			prev_type = ''
 			total_size = 0
 			chain_length = 0
@@ -268,7 +270,7 @@ module S3TarBackup
 				chain_length_str = (chain_length == 0 ? '' : chain_length.to_s).ljust(3)
 				chain_cum_size_str = (object[:type] == :full ? '' : bytes_to_human(chain_cum_size)).ljust(8)
 				puts "#{type}  #{chain_length_str} #{object[:date].strftime('%F %T')}    #{bytes_to_human(object[:size]).ljust(8)}    " \
-					"#{chain_cum_size_str}      (#{object[:compression]})"
+					"#{chain_cum_size_str}      #{object[:compression].to_s.ljust(7)}   #{object[:encryption] ? 'Y' : 'N'}"
 				total_size += object[:size]
 			end
 			puts "\n"
@@ -307,6 +309,11 @@ module S3TarBackup
 				count += 1
 			end
 			format("%.2f", n) << %w(B KB MB GB TB)[count]
+		end
+
+		def exec(cmd)
+			puts "Executing: #{cmd}"
+			system(cmd)
 		end
 	end
 end
