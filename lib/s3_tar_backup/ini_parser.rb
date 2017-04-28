@@ -148,7 +148,7 @@ module S3TarBackup
 			end
 
 			case type
-			when Fixnum
+			when Integer
 				return val.to_i
 			when Float
 				return val.to_f

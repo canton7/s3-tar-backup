@@ -165,7 +165,7 @@ Make sure you create a backup of the private key using `gpg -a --export-secret-k
 
 ```ini
 [settings]
-aws_access_key = ABCD
+aws_access_key_id = ABCD
 aws_secret_access_key = ABCDE
 aws_region = eu-west-1
 ; Do a new full backup every 2 weeks
