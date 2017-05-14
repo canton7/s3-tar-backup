@@ -341,7 +341,10 @@ module S3TarBackup
 
 		def exec(cmd)
 			puts "Executing: #{cmd}"
-			system(cmd)
+			result = system(cmd)
+      unless result
+        raise "Unable to run command. See above output for clues."
+      end
 		end
 	end
 end
