@@ -9,7 +9,7 @@ You can then restore the files at a later date.
 
 This tool was built as a replacement for duplicity, after duplicity started throwing errors and generally being a bit unreliable.
 It uses command-line tar to create incremental backup snapshots, and the aws-s3 gem to upload these to S3.
-It can also optionally use command-ling gpg to encrypt backups.
+It can also optionally use command-line gpg to encrypt backups.
 
 In practice, it turns out that this tool has few lower bandwidth and CPU requirements, and can restore a backup in a fraction of the time that duplicity would take.
 
@@ -71,8 +71,9 @@ compression = <compression_type>
 ; Optional: defaults to false
 always_full = <bool>
 
-; Optional: defaults to no key
-gpg_key = <key ID>
+; You may choose one of the following two settings
+gpg_key = <key ID>    ; Asymmetric encryption
+password = <password> ; Symmetric encryption
 
 ; You have have multiple lines of the following types.
 ; Values from here and from your profiles will be combined
@@ -117,6 +118,11 @@ This is used to say that incremental backups should never be used.
 `gpg_key` is an optional GPG Key ID to use to encrypt backups.
 This key must exist in your keyring.
 By default, no key is used and backups are not encrypted.
+This may not be used at the same time as `password`.
+
+`password` is an optional password to use to encrypt backups.
+By default, backups are not encrypted.
+This may not be used at the same time as `gpg_key`.
 
 `source` contains the folders to be backed up.
 
@@ -144,22 +150,38 @@ dest = <bucket_name>/<path>
 exclude = </some/dir>
 pre-backup = <some command>
 post-backup = <some command>
+
+; You may optionally specify one of the two following keys
 gpg_key = <key ID>
+password = <password>
 ```
 
 `profile_name` is the name of the profile. You'll use this later.
 
 ### Encryption
 
+#### Asymmetric Encryption
+
 `s3-tar-backup` will encrypt your backups if you specify the config key `gpg_key`, which is the ID of the key to use for encrypting backups. 
 In order to create an encrypted backup, the public key with this ID must exist in your keyring: it doesn't matter if it has a passphrase or not.
 In order to restore an encrypted backup, the private key corresponding to the public key which encrypted the backup must exist in your keyring: your `gpg-agent` will prompt you for the passphrase if required.
 The `gpg_key` option is not used when restoring from backup (instead gpg works out which key to use to decrypt the backup by looking at the backup itself), which means that you can safely change the key that `s3-tar-backup` uses to encrypt backups without losing access to older backups.
 
-`s3-tar-backup` works out whether or not to try and decrypt a backup by looking at its file extension, which means you can safely enable or disable encryption without losing access to older backups.
+`s3-tar-backup` works out whether or not to try and decrypt a backup (and whether symmetric or asymmetric encryption is used) by looking at its file extension, which means you can safely enable or disable encryption without losing access to older backups.
 
 To create a key, run `gpg --gen-key`, and follow the prompts.
 Make sure you create a backup of the private key using `gpg -a --export-secret-keys <key ID> > s3-tar-backup-secret-key.asc`.
+
+#### Symmetric Encryption
+
+`s3-tar-backup` will encrypt your backups with a symmetric encryption key if the config key `password` is specified, which is the encryption passphrase to use.
+This option is used when both encrypting and decrypting backups, which means that `s3-tar-backup` will not be able to decrypt backups it previously created if you change the encryption key. To work around this, you can specify the `--password "my password"` command-line option: if given, this will override the password specified in your configuration file.
+If you specify an empty password (`--password ''`), then gpg will prompt you for a password on every file it tries to decrypt. 
+To avoid this inconvenience, you should run a full backup whenever you change the encryption key.
+
+**NOTE**: your password is passed to GPG is a command-line flag, and is printed to stdout.
+Do **NOT** use this if there are untrusted users on your machine: use asymmetric encryption instead.
+
 
 ### Example config file
 
@@ -189,6 +211,8 @@ source = /root
 exclude = .backup
 ; Do full backups less rarely
 full_if_older_than = 4W
+; Use symmetric encryption for this profile
+password = chaatoav6Yiec2aingahrahGulohdoh4
 
 [profile "mysql"]
 pre-backup = mysqldump -uuser -ppassword --all-databases > /tmp/mysql_dump.sql
@@ -239,7 +263,7 @@ s3-tar-backup will go through all old backups, and remove those specified by `re
 ### Restore
 
 ```
-s3-tar-backup --config <config_file> [--profile <profile>] --restore <restore_dir> [--restore_date <restore_date>] [--verbose]
+s3-tar-backup --config <config_file> [--profile <profile>] --restore <restore_dir> [--restore_date <restore_date>] [--password "<password>"] [--verbose]
 ```
 
 This command will get s3-tar-backup to fetch all the necessary data to restore the latest version of your backup (or an older one if you use `--restore-date`), and stick it into `<restore_dir>`.
