@@ -10,7 +10,7 @@ module S3TarBackup
 		@archive
 		@compression_flag
 		@compression_ext
-		@gpg_key
+		@encryption
 
 		COMPRESSIONS = {
 			:gzip => {:flag => '-z', :ext => 'tar.gz'},
@@ -19,16 +19,17 @@ module S3TarBackup
 			:lzma2 => {:flag => '-J', :ext => 'tar.xz'}
 		}
 
-		ENCRYPTED_EXTENSION = 'asc'
+		ENCRYPTED_EXTENSIONS = { :gpg_key => 'asc', :password => 'gpg' }
+		PASSPHRASE_CIPHER_ALGO = 'AES256'
 
 
-		def initialize(backup_dir, name, sources, exclude, compression=:bzip2, gpg_key=nil)
+		def initialize(backup_dir, name, sources, exclude, compression=:bzip2, encryption=nil)
 			@backup_dir, @name, @sources, @exclude = backup_dir, name, [*sources], [*exclude]
 			raise "Unknown compression #{compression}. Valid options are #{COMPRESSIONS.keys.join(', ')}" unless COMPRESSIONS.has_key?(compression)
 			@compression_flag = COMPRESSIONS[compression][:flag]
 			@compression_ext = COMPRESSIONS[compression][:ext]
 			@time = Time.now
-			@gpg_key = gpg_key
+			@encryption = encryption
 
 			Dir.mkdir(@backup_dir) unless File.directory?(@backup_dir)
 		end
@@ -48,7 +49,7 @@ module S3TarBackup
 		def archive
 			return @archive if @archive
 			type = snar_exists? ? 'incr' : 'full'
-			encrypted_bit = @gpg_key ? ".#{ENCRYPTED_EXTENSION}" : ''
+			encrypted_bit = @encryption ? ".#{ENCRYPTED_EXTENSIONS[@encryption[:type]]}" : ''
 			File.join(@backup_dir, "backup-#{@name}-#{@time.strftime('%Y%m%d_%H%M%S')}-#{type}.#{@compression_ext}#{encrypted_bit}")
 		end
 
@@ -56,14 +57,19 @@ module S3TarBackup
 			exclude = @exclude.map{ |e| " --exclude \"#{e}\""}.join
 			sources = @sources.map{ |s| "\"#{s}\""}.join(' ')
 			@archive = archive
-			tar_archive = @gpg_key ? '' : "f \"#{@archive}\""
-			gpg_cmd = @gpg_key ? " | gpg -r #{@gpg_key} -o \"#{@archive}\" --always-trust --yes --batch --no-tty -e" : ''
+			tar_archive = @encryption ? '' : "f \"#{@archive}\""
+			gpg_cmd = @encryption.nil? ? '' : case @encryption[:type]
+			when :gpg_key
+				" | gpg -r #{@encryption[:gpg_key]} -o \"#{@archive}\" --always-trust --yes --batch --no-tty -e"
+			when :password
+				" | gpg -c --passphrase \"#{@encryption[:password]}\" --cipher-algo #{PASSPHRASE_CIPHER_ALGO} -o \"#{@archive}\" --batch --yes --no-tty"
+			end
 			"tar c#{verbose ? 'v' : ''}#{tar_archive} #{@compression_flag} -g \"#{snar_path}\"#{exclude} --no-check-device #{sources}#{gpg_cmd}"
 		end
 
 		def self.parse_object(object, profile)
 			name = File.basename(object.key)
-			match = name.match(/^backup-([\w\-]+)-(\d\d\d\d)(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)-(\w+)\.(.*?)(\.#{ENCRYPTED_EXTENSION})?$/)
+			match = name.match(/^backup-([\w\-]+)-(\d\d\d\d)(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)-(\w+)\.(.*?)(?:\.(#{ENCRYPTED_EXTENSIONS.values.join('|')}))?$/)
 			return nil unless match && match[1] == profile
 
 			return {
@@ -74,16 +80,23 @@ module S3TarBackup
 				:size => object.content_length,
 				:profile => match[1],
 				:compression => COMPRESSIONS.find{ |k,v| v[:ext] == match[9] }[0],
-				:encryption => !match[10].nil?
+				:encryption => match[10].nil? ? nil : ENCRYPTED_EXTENSIONS.key(match[10])
 			}
 		end
 
 		# No real point in creating a whole new class for this one
-		def self.restore_cmd(restore_into, restore_from, verbose=false)
-			ext, encrypted = restore_from.match(/[^\.\\\/]+\.(.*?)(\.#{ENCRYPTED_EXTENSION})?$/)[1..2]
+		def self.restore_cmd(restore_into, restore_from, verbose=false, password=nil)
+			ext, encryption_ext = restore_from.match(/[^\.\\\/]+\.(.*?)(?:\.(#{ENCRYPTED_EXTENSIONS.values.join('|')}))?$/)[1..2]
+			encryption = ENCRYPTED_EXTENSIONS.key(encryption_ext)
 			compression_flag = COMPRESSIONS.find{ |k,v| v[:ext] == ext }[1][:flag]
-			tar_archive = encrypted ? '' : "f \"#{restore_from}\""
-			gpg_cmd = encrypted ? "gpg --yes --batch --no-tty -d \"#{restore_from}\" | " : ''
+			tar_archive = encryption ? '' : "f \"#{restore_from}\""
+			gpg_cmd = encryption.nil? ? '' : case encryption
+			when :gpg_key
+				"gpg --yes -d \"#{restore_from}\" | "
+			when :password
+				flag = password && !password.empty? ? " --passphrase \"#{password}\"" : ''
+				"gpg --yes#{flag} -d \"#{restore_from}\" | "
+			end
 			"#{gpg_cmd}tar xp#{verbose ? 'v' : ''}#{tar_archive} #{compression_flag} -G -C #{restore_into}"
 		end
 

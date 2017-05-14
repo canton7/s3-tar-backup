@@ -27,6 +27,7 @@ module S3TarBackup
 				opt :restore_date, "Restore a backup from the specified date. Format YYYYMM[DD[hh[mm[ss]]]]", :type => :string
 				opt :backup_config, "Backs up the specified configuration file"
 				opt :list_backups, "List the stored backup info for one or more profiles"
+        opt :password, "Override the password used to decrypt backups", :type => :string
 				opt :verbose, "Show verbose output", :short => 'v'
 				conflicts :backup, :cleanup, :restore, :backup_config, :list_backups
 			end
@@ -34,6 +35,7 @@ module S3TarBackup
 
 			Trollop::die "--full requires --backup" if opts[:full] && !opts[:backup]
 			Trollop::die "--restore-date requires --restore" if opts[:restore_date_given] && !opts[:restore_given]
+      Trollop::die "--password requires --restore" if opts[:password_given] && !opts[:restore_given]
 			unless opts[:backup] || opts[:cleanup] || opts[:restore_given] || opts[:backup_config] || opts[:list_backups]
 				Trollop::die "Need one of --backup, --cleanup, --restore, --backup-config, --list-backups"
 			end
@@ -83,12 +85,31 @@ module S3TarBackup
 		end
 
 		def gen_backup_config(profile, config)
-			bucket, dest_prefix = (config.get("profile.#{profile}.dest", false) || config['settings.dest']).split('/', 2)
-			gpg_key = config.get("profile.#{profile}.gpg_key", false) || config['settings.gpg_key']
+			top_gpg_key = config.get('settings.gpg_key', false)
+      profile_gpg_key = config.get("profile.#{profile}.gpg_key", false)
+      top_password = config.get('settings.password', false)
+      profile_password = config.get("profile.#{profile}.password", false)
+      raise "Cannot specify gpg_key and password together at the top level" if top_gpg_key && top_password 
+      raise "Cannot specify both gpg_key and password for profile #{profile}" if profile_gpg_key && profile_password
+
+      encryption = nil
+      if profile_password
+        encryption = profile_password.empty? ? nil : { :type => :password, :password => profile_password }
+      elsif profile_gpg_key
+        encryption = profile_gpg_key.empty? ? nil : { :type => :gpg_key, :gpg_key => profile_gpg_key }
+      elsif top_password
+        encryption = top_password.empty? ? nil : { :type => :password, :password => top_password }
+      elsif top_gpg_key
+        encryption = top_gpg_key.empty? ? nil : { :type => :gpg_key, :gpg_key => top_gpg_key }
+      end
+
+      bucket, dest_prefix = (config.get("profile.#{profile}.dest", false) || config['settings.dest']).split('/', 2)
+
 			backup_config = {
 				:backup_dir => config.get("profile.#{profile}.backup_dir", false) || config['settings.backup_dir'],
 				:name => profile,
-				:gpg_key => gpg_key && !gpg_key.empty? ? gpg_key : nil,
+        :encryption => encryption,
+        :password => profile_password || top_password || '',
 				:sources => [*config.get("profile.#{profile}.source", [])] + [*config.get("settings.source", [])],
 				:exclude => [*config.get("profile.#{profile}.exclude", [])] + [*config.get("settings.exclude", [])],
 				:bucket => bucket,
@@ -157,7 +178,7 @@ module S3TarBackup
 		# backup_dir, name, soruces, exclude, bucket, dest_prefix
 		def backup_incr(config, verbose=false)
 			puts "Starting new incremental backup"
-			backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude], config[:compression], config[:gpg_key])
+			backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude], config[:compression], config[:encryption])
 
 			# Try and get hold of the snar file
 			unless backup.snar_exists?
@@ -181,7 +202,7 @@ module S3TarBackup
 
 		def backup_full(config, verbose=false)
 			puts "Starting new full backup"
-			backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude], config[:compression], config[:gpg_key])
+			backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude], config[:compression], config[:encryption])
 			# Nuke the snar file -- forces a full backup
 			File.delete(backup.snar_path) if File.exists?(backup.snar_path)
 			backup(config, backup, verbose)
@@ -245,8 +266,7 @@ module S3TarBackup
 					end
 				end
 				puts "Extracting..."
-				exec(Backup.restore_cmd(restore_dir, dl_file, opts[:verbose]))
-
+				exec(Backup.restore_cmd(restore_dir, dl_file, opts[:verbose], opts[:password] || backup_config[:password]))
 				File.delete(dl_file)
 			end
 		end
@@ -254,7 +274,7 @@ module S3TarBackup
 		def perform_list_backups(prev_backups, backup_config)
 			# prev_backups alreays contains just the files for the current profile
 			puts "===== Backups list for #{backup_config[:name]} ====="
-			puts "Type: N:  Date:#{' '*18}Size:       Chain Size:   Format:   Encrypted:\n\n"
+			puts "Type: N:  Date:#{' '*18}Size:       Chain Size:   Format:   Encryption:\n\n"
 			prev_type = ''
 			total_size = 0
 			chain_length = 0
@@ -269,8 +289,16 @@ module S3TarBackup
 
 				chain_length_str = (chain_length == 0 ? '' : chain_length.to_s).ljust(3)
 				chain_cum_size_str = (object[:type] == :full ? '' : bytes_to_human(chain_cum_size)).ljust(8)
+        encryption = case object[:encryption]
+        when :gpg_key
+          'Key'
+        when :password
+          'password'
+        else
+          'None'
+        end
 				puts "#{type}  #{chain_length_str} #{object[:date].strftime('%F %T')}    #{bytes_to_human(object[:size]).ljust(8)}    " \
-					"#{chain_cum_size_str}      #{object[:compression].to_s.ljust(7)}   #{object[:encryption] ? 'Y' : 'N'}"
+					"#{chain_cum_size_str}      #{object[:compression].to_s.ljust(7)}   #{encryption}"
 				total_size += object[:size]
 			end
 			puts "\n"
