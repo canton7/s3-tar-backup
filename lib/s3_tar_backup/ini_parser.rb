@@ -1,8 +1,9 @@
 module S3TarBackup
 	class IniParser
+		attr_reader :file_path
+
 		@config
 		@comments
-		@file_path
 		@defaults
 
 		def initialize(file_path, defaults={})

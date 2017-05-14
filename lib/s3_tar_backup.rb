@@ -27,7 +27,7 @@ module S3TarBackup
 				opt :restore_date, "Restore a backup from the specified date. Format YYYYMM[DD[hh[mm[ss]]]]", :type => :string
 				opt :backup_config, "Backs up the specified configuration file"
 				opt :list_backups, "List the stored backup info for one or more profiles"
-        opt :password, "Override the password used to decrypt backups", :type => :string
+        opt :password_file, "Override the password file used to decrypt backups", :type => :string
 				opt :verbose, "Show verbose output", :short => 'v'
 				conflicts :backup, :cleanup, :restore, :backup_config, :list_backups
 			end
@@ -35,7 +35,7 @@ module S3TarBackup
 
 			Trollop::die "--full requires --backup" if opts[:full] && !opts[:backup]
 			Trollop::die "--restore-date requires --restore" if opts[:restore_date_given] && !opts[:restore_given]
-      Trollop::die "--password requires --restore" if opts[:password_given] && !opts[:restore_given]
+      Trollop::die "--password-file requires --restore" if opts[:password_file_given] && !opts[:restore_given]
 			unless opts[:backup] || opts[:cleanup] || opts[:restore_given] || opts[:backup_config] || opts[:list_backups]
 				Trollop::die "Need one of --backup, --cleanup, --restore, --backup-config, --list-backups"
 			end
@@ -84,21 +84,25 @@ module S3TarBackup
 			AWS::S3.new(access_key_id: access_key, secret_access_key: secret_key, region: region || 'eu-west-1')
 		end
 
+    def absolute_path_from_config_file(config, path)
+      File.expand_path(File.join(File.absolute_path(File.dirname(config.file_path)), path))
+    end
+
 		def gen_backup_config(profile, config)
 			top_gpg_key = config.get('settings.gpg_key', false)
       profile_gpg_key = config.get("profile.#{profile}.gpg_key", false)
-      top_password = config.get('settings.password', false)
-      profile_password = config.get("profile.#{profile}.password", false)
-      raise "Cannot specify gpg_key and password together at the top level" if top_gpg_key && top_password 
-      raise "Cannot specify both gpg_key and password for profile #{profile}" if profile_gpg_key && profile_password
+      top_password_file = config.get('settings.password_file', false)
+      profile_password_file = config.get("profile.#{profile}.password_file", false)
+      raise "Cannot specify gpg_key and password_file together at the top level" if top_gpg_key && top_password_file 
+      raise "Cannot specify both gpg_key and password_file for profile #{profile}" if profile_gpg_key && profile_password_file
 
       encryption = nil
-      if profile_password
-        encryption = profile_password.empty? ? nil : { :type => :password, :password => profile_password }
+      if profile_password_file
+        encryption = profile_password_file.empty? ? nil : { :type => :password_file, :password_file => absolute_path_from_config_file(config, profile_password_file) }
       elsif profile_gpg_key
         encryption = profile_gpg_key.empty? ? nil : { :type => :gpg_key, :gpg_key => profile_gpg_key }
-      elsif top_password
-        encryption = top_password.empty? ? nil : { :type => :password, :password => top_password }
+      elsif top_password_file
+        encryption = top_password_file.empty? ? nil : { :type => :password_file, :password_file => absolute_path_from_config_file(config, top_password_file) }
       elsif top_gpg_key
         encryption = top_gpg_key.empty? ? nil : { :type => :gpg_key, :gpg_key => top_gpg_key }
       end
@@ -109,7 +113,7 @@ module S3TarBackup
 				:backup_dir => config.get("profile.#{profile}.backup_dir", false) || config['settings.backup_dir'],
 				:name => profile,
         :encryption => encryption,
-        :password => profile_password || top_password || '',
+        :password_file => profile_password_file || top_password_file || '',
 				:sources => [*config.get("profile.#{profile}.source", [])] + [*config.get("settings.source", [])],
 				:exclude => [*config.get("profile.#{profile}.exclude", [])] + [*config.get("settings.exclude", [])],
 				:bucket => bucket,
@@ -266,7 +270,7 @@ module S3TarBackup
 					end
 				end
 				puts "Extracting..."
-				exec(Backup.restore_cmd(restore_dir, dl_file, opts[:verbose], opts[:password] || backup_config[:password]))
+				exec(Backup.restore_cmd(restore_dir, dl_file, opts[:verbose], opts[:password_file] || backup_config[:password_file]))
 				File.delete(dl_file)
 			end
 		end
@@ -292,8 +296,8 @@ module S3TarBackup
         encryption = case object[:encryption]
         when :gpg_key
           'Key'
-        when :password
-          'password'
+        when :password_file
+          'Password'
         else
           'None'
         end

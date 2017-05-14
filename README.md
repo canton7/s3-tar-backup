@@ -72,8 +72,8 @@ compression = <compression_type>
 always_full = <bool>
 
 ; You may choose one of the following two settings
-gpg_key = <key ID>    ; Asymmetric encryption
-password = <password> ; Symmetric encryption
+gpg_key = <key ID>              ; Asymmetric encryption
+password_file = <password file> ; Symmetric encryption
 
 ; You have have multiple lines of the following types.
 ; Values from here and from your profiles will be combined
@@ -118,9 +118,9 @@ This is used to say that incremental backups should never be used.
 `gpg_key` is an optional GPG Key ID to use to encrypt backups.
 This key must exist in your keyring.
 By default, no key is used and backups are not encrypted.
-This may not be used at the same time as `password`.
+This may not be used at the same time as `password_file`.
 
-`password` is an optional password to use to encrypt backups.
+`password_file` is an optional path to a file containing the password to use to encrypt backups.
 By default, backups are not encrypted.
 This may not be used at the same time as `gpg_key`.
 
@@ -153,7 +153,7 @@ post-backup = <some command>
 
 ; You may optionally specify one of the two following keys
 gpg_key = <key ID>
-password = <password>
+password_file = <password file>
 ```
 
 `profile_name` is the name of the profile. You'll use this later.
@@ -174,14 +174,10 @@ Make sure you create a backup of the private key using `gpg -a --export-secret-k
 
 #### Symmetric Encryption
 
-`s3-tar-backup` will encrypt your backups with a symmetric encryption key if the config key `password` is specified, which is the encryption passphrase to use.
-This option is used when both encrypting and decrypting backups, which means that `s3-tar-backup` will not be able to decrypt backups it previously created if you change the encryption key. To work around this, you can specify the `--password "my password"` command-line option: if given, this will override the password specified in your configuration file.
-If you specify an empty password (`--password ''`), then gpg will prompt you for a password on every file it tries to decrypt. 
+`s3-tar-backup` will encrypt your backups with a symmetric encryption key if the config key `password_file` is specified, which is the path to a file containing the passphrase to use the encrypt the backup, relative to the config file.
+This option is used when both encrypting and decrypting backups, which means that `s3-tar-backup` will not be able to decrypt backups it previously created if you change the encryption key. To work around this, you can specify the `--password-file path/to/file` command-line option: if given, this will override the password file specified in your configuration file.
+If you specify an empty password file (`--password-file ''`), then gpg will prompt you for a password on every file it tries to decrypt. 
 To avoid this inconvenience, you should run a full backup whenever you change the encryption key.
-
-**NOTE**: your password is passed to GPG is a command-line flag, and is printed to stdout.
-Do **NOT** use this if there are untrusted users on your machine: use asymmetric encryption instead.
-
 
 ### Example config file
 
@@ -212,7 +208,7 @@ exclude = .backup
 ; Do full backups less rarely
 full_if_older_than = 4W
 ; Use symmetric encryption for this profile
-password = chaatoav6Yiec2aingahrahGulohdoh4
+password_file = password.txt
 
 [profile "mysql"]
 pre-backup = mysqldump -uuser -ppassword --all-databases > /tmp/mysql_dump.sql
@@ -263,13 +259,15 @@ s3-tar-backup will go through all old backups, and remove those specified by `re
 ### Restore
 
 ```
-s3-tar-backup --config <config_file> [--profile <profile>] --restore <restore_dir> [--restore_date <restore_date>] [--password "<password>"] [--verbose]
+s3-tar-backup --config <config_file> [--profile <profile>] --restore <restore_dir> [--restore_date <restore_date>] [--password-file <password_file>] [--verbose]
 ```
 
 This command will get s3-tar-backup to fetch all the necessary data to restore the latest version of your backup (or an older one if you use `--restore-date`), and stick it into `<restore_dir>`.
 
 Using `<restore_date>`, you can tell s3-tar-backup to restore the first backup before the specified date.
 The date format to use is `YYYYMM[DD[hh[mm[ss]]]]`, for example `20110406` means `2011-04-06 00:00:00`, while `201104062143` means `2011-04-06 21:43:00`.
+
+Use `--password-file` to override the file containing the symmetric encryption key to use to decrypt the backup (or `--password-file ''` to ask GPG to prompt for the password).
 
 `--verbose` makes tar spit out the files that it restores.
 

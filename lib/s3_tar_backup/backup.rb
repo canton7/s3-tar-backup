@@ -19,7 +19,7 @@ module S3TarBackup
 			:lzma2 => {:flag => '-J', :ext => 'tar.xz'}
 		}
 
-		ENCRYPTED_EXTENSIONS = { :gpg_key => 'asc', :password => 'gpg' }
+		ENCRYPTED_EXTENSIONS = { :gpg_key => 'asc', :password_file => 'gpg' }
 		PASSPHRASE_CIPHER_ALGO = 'AES256'
 
 
@@ -61,8 +61,8 @@ module S3TarBackup
 			gpg_cmd = @encryption.nil? ? '' : case @encryption[:type]
 			when :gpg_key
 				" | gpg -r #{@encryption[:gpg_key]} -o \"#{@archive}\" --always-trust --yes --batch --no-tty -e"
-			when :password
-				" | gpg -c --passphrase \"#{@encryption[:password]}\" --cipher-algo #{PASSPHRASE_CIPHER_ALGO} -o \"#{@archive}\" --batch --yes --no-tty"
+			when :password_file
+				" | gpg -c --passphrase-file \"#{@encryption[:password_file]}\" --cipher-algo #{PASSPHRASE_CIPHER_ALGO} -o \"#{@archive}\" --batch --yes --no-tty"
 			end
 			"tar c#{verbose ? 'v' : ''}#{tar_archive} #{@compression_flag} -g \"#{snar_path}\"#{exclude} --no-check-device #{sources}#{gpg_cmd}"
 		end
@@ -85,7 +85,7 @@ module S3TarBackup
 		end
 
 		# No real point in creating a whole new class for this one
-		def self.restore_cmd(restore_into, restore_from, verbose=false, password=nil)
+		def self.restore_cmd(restore_into, restore_from, verbose=false, password_file=nil)
 			ext, encryption_ext = restore_from.match(/[^\.\\\/]+\.(.*?)(?:\.(#{ENCRYPTED_EXTENSIONS.values.join('|')}))?$/)[1..2]
 			encryption = ENCRYPTED_EXTENSIONS.key(encryption_ext)
 			compression_flag = COMPRESSIONS.find{ |k,v| v[:ext] == ext }[1][:flag]
@@ -93,8 +93,8 @@ module S3TarBackup
 			gpg_cmd = encryption.nil? ? '' : case encryption
 			when :gpg_key
 				"gpg --yes -d \"#{restore_from}\" | "
-			when :password
-				flag = password && !password.empty? ? " --passphrase \"#{password}\"" : ''
+			when :password_file
+				flag = password_file && !password_file.empty? ? " --passphrase-file \"#{password_file}\"" : ''
 				"gpg --yes#{flag} -d \"#{restore_from}\" | "
 			end
 			"#{gpg_cmd}tar xp#{verbose ? 'v' : ''}#{tar_archive} #{compression_flag} -G -C #{restore_into}"
