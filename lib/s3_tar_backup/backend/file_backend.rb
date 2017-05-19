@@ -1,4 +1,5 @@
 require 'fileutils'
+require 'pathname'
 
 require_relative 'upload_item_failed_error'
 require_relative 'backend_object'
@@ -8,7 +9,7 @@ module S3TarBackup::Backend
     attr_reader :prefix
 
     def initialize(path)
-      @prefix = path
+      @prefix = Pathname.new(path).absolute? ? path : File.expand_path(File.join('~', path))
     end
 
     def name
