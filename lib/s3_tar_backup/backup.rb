@@ -1,4 +1,4 @@
-require 'aws-sdk'
+require 'fileutils'
 
 module S3TarBackup
   class Backup
@@ -31,7 +31,7 @@ module S3TarBackup
       @time = Time.now
       @encryption = encryption
 
-      Dir.mkdir(@backup_dir) unless File.directory?(@backup_dir)
+      FileUtils.mkdir_p(@backup_dir) unless File.directory?(@backup_dir)
     end
 
     def snar

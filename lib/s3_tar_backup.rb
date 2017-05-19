@@ -19,7 +19,7 @@ module S3TarBackup
           "s3-tar-backup -c config.ini [-p profile] --backup-config [--verbose]\n" \
           "s3-tar-backup -c config.ini [-p profile] --list-backups\n\n" \
           "Option details:\n"
-        opt :config, "Configuration file", :short => 'c', :type => :string, :required => true
+        opt :config, "Configuration file", :short => 'c', :type => :string
         opt :backup, "Make an incremental backup"
         opt :full, "Make the backup a full backup"
         opt :profile, "The backup profile(s) to use (default all)", :short => 'p', :type => :strings
@@ -41,9 +41,11 @@ module S3TarBackup
         Trollop::die "Need one of --backup, --cleanup, --restore, --backup-config, --list-backups"
       end
 
+      config_file = opts[:config] || '~/.s3-tar-backup/config.ini'
+
       begin
-        raise "Config file #{opts[:config]} not found" unless File.exists?(opts[:config])
-        config = IniParser.new(opts[:config]).load
+        raise "Config file #{config_file} not found.#{opts[:config] ? '' : ' You can specify a config file to use with --config'}" unless File.exists?(config_file)
+        config = IniParser.new(config_file).load
         profiles = opts[:profile] || config.find_sections(/^profile\./).keys.map{ |k| k.to_s.split('.', 2)[1] }
 
         # This is a bit of a special case
@@ -52,11 +54,11 @@ module S3TarBackup
           raise "You must specify a single profile (used to determine the location to back up to) " \
             "if backing up config and dest key is not in [settings]" if !dest && profiles.count != 1
           dest ||= config["profile.#{profiles[0]}.dest"]
-          puts "===== Backing up config file #{opts[:config]} ====="
+          puts "===== Backing up config file #{config_file} ====="
           prefix = config.get('settings.dest', false) || config["profile.#{profiles[0]}.dest"]
-          puts "Uploading #{opts[:config]} to #{prefix}/#{File.basename(opts[:config])}"
+          puts "Uploading #{config_file} to #{prefix}/#{File.basename(config_file)}"
           backend = create_backend(config, prefix)
-          upload(backend, opts[:config], File.basename(opts[:config]))
+          upload(backend, config_file, File.basename(config_file))
           return
         end
 
@@ -113,7 +115,7 @@ module S3TarBackup
       end
 
       backup_config = {
-        :backup_dir => config.get("profile.#{profile}.backup_dir", false) || config['settings.backup_dir'],
+        :backup_dir => config.get("profile.#{profile}.backup_dir", false) || config.get('settings.backup_dir', '~/.s3-tar-backup/tmp'),
         :name => profile,
         :encryption => encryption,
         :password_file => profile_password_file || top_password_file || '',
