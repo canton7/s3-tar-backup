@@ -1,4 +1,5 @@
 require 'fileutils'
+require 'pathname'
 
 module S3TarBackup
   class Backup
@@ -24,12 +25,20 @@ module S3TarBackup
 
 
     def initialize(backup_dir, name, sources, exclude, compression=:bzip2, encryption=nil)
-      @backup_dir, @name, @sources, @exclude = backup_dir, name, [*sources], [*exclude]
+      @backup_dir, @name = backup_dir, name
       raise "Unknown compression #{compression}. Valid options are #{COMPRESSIONS.keys.join(', ')}" unless COMPRESSIONS.has_key?(compression)
       @compression_flag = COMPRESSIONS[compression][:flag]
       @compression_ext = COMPRESSIONS[compression][:ext]
       @time = Time.now
       @encryption = encryption
+
+      @sources = [*sources].map{ |x| x.gsub('\\', '/') }
+      @exclude = [*exclude].map{ |x| x.gsub('\\', '/') }
+
+      # If the backup dir is inside any of the sources, exclude it
+      absolute_backup_dir = File.absolute_path(backup_dir)
+      # I cannot for the life of me get tar to accept absolute paths to directories. Passing a path relative to the CWD seems to work though
+      @exclude.push(*@sources.select{ |x| absolute_backup_dir.start_with?(File.absolute_path(x)) }.map{ |x| Pathname.new(absolute_backup_dir).relative_path_from(Pathname.new(Dir.pwd)).to_s })
 
       FileUtils.mkdir_p(@backup_dir) unless File.directory?(@backup_dir)
     end
