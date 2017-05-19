@@ -1,8 +1,8 @@
-require 'aws-sdk'
 require 'trollop'
 require 's3_tar_backup/ini_parser'
 require 's3_tar_backup/backup'
 require 's3_tar_backup/version'
+require 's3_tar_backup/backend/s3_backend'
 
 module S3TarBackup
   class Main
@@ -44,11 +44,6 @@ module S3TarBackup
         raise "Config file #{opts[:config]} not found" unless File.exists?(opts[:config])
         config = IniParser.new(opts[:config]).load
         profiles = opts[:profile] || config.find_sections(/^profile\./).keys.map{ |k| k.to_s.split('.', 2)[1] }
-        @s3 = connect_s3(
-          ENV['AWS_ACCESS_KEY_ID'] || config['settings.aws_access_key_id'],
-          ENV['AWS_SECRET_ACCESS_KEY'] || config['settings.aws_secret_access_key'],
-          config.get('settings.aws_region', false)
-        )
 
         # This is a bit of a special case
         if opts[:backup_config]
@@ -57,9 +52,10 @@ module S3TarBackup
             "if backing up config and dest key is not in [settings]" if !dest && profiles.count != 1
           dest ||= config["profile.#{profiles[0]}.dest"]
           puts "===== Backing up config file #{opts[:config]} ====="
-          bucket, prefix = (config.get('settings.dest', false) || config["profile.#{profiles[0]}.dest"]).split('/', 2)
-          puts "Uploading #{opts[:config]} to #{bucket}/#{prefix}/#{File.basename(opts[:config])}"
-          upload(opts[:config], bucket, "#{prefix}/#{File.basename(opts[:config])}")
+          prefix = config.get('settings.dest', false) || config["profile.#{profiles[0]}.dest"]
+          puts "Uploading #{opts[:config]} to #{prefix}/#{File.basename(opts[:config])}"
+          backend = create_backend(config, prefix)
+          upload(backend, opts[:config], "#{prefix}/#{File.basename(opts[:config])}")
           return
         end
 
@@ -67,7 +63,7 @@ module S3TarBackup
           raise "No such profile: #{profile}" unless config.has_section?("profile.#{profile}")
           opts[:profile] = profile
           backup_config = gen_backup_config(opts[:profile], config)
-          prev_backups = get_objects(backup_config[:bucket], backup_config[:dest_prefix], opts[:profile])
+          prev_backups = get_objects(backup_config, opts[:profile])
           perform_backup(opts, prev_backups, backup_config) if opts[:backup]
           perform_cleanup(prev_backups, backup_config) if opts[:backup] || opts[:cleanup]
           perform_restore(opts, prev_backups, backup_config) if opts[:restore_given]
@@ -79,13 +75,17 @@ module S3TarBackup
       end
     end
 
-    def connect_s3(access_key, secret_key, region)
-      warn "No AWS region specified (config key settings.s3_region). Assuming eu-west-1" unless region
-      AWS::S3.new(access_key_id: access_key, secret_access_key: secret_key, region: region || 'eu-west-1')
-    end
-
     def absolute_path_from_config_file(config, path)
       File.expand_path(File.join(File.absolute_path(File.dirname(config.file_path)), path))
+    end
+
+    def create_backend(config, dest_prefix)
+        Backend::S3Backend.new(
+          ENV['AWS_ACCESS_KEY_ID'] || config['settings.aws_access_key_id'],
+          ENV['AWS_SECRET_ACCESS_KEY'] || config['settings.aws_secret_access_key'],
+          config.get('settings.aws_region', false),
+          config.get('settings.dest', false) || config["profile.#{profiles[0]}.dest"]
+        )
     end
 
     def gen_backup_config(profile, config)
@@ -107,8 +107,6 @@ module S3TarBackup
         encryption = top_gpg_key.empty? ? nil : { :type => :gpg_key, :gpg_key => top_gpg_key }
       end
 
-      bucket, dest_prefix = (config.get("profile.#{profile}.dest", false) || config['settings.dest']).split('/', 2)
-
       backup_config = {
         :backup_dir => config.get("profile.#{profile}.backup_dir", false) || config['settings.backup_dir'],
         :name => profile,
@@ -116,8 +114,6 @@ module S3TarBackup
         :password_file => profile_password_file || top_password_file || '',
         :sources => [*config.get("profile.#{profile}.source", [])] + [*config.get("settings.source", [])],
         :exclude => [*config.get("profile.#{profile}.exclude", [])] + [*config.get("settings.exclude", [])],
-        :bucket => bucket,
-        :dest_prefix => dest_prefix.chomp('/'),
         :pre_backup => [*config.get("profile.#{profile}.pre-backup", [])] + [*config.get('settings.pre-backup', [])],
         :post_backup => [*config.get("profile.#{profile}.post-backup", [])] + [*config.get('settings.post-backup', [])],
         :full_if_older_than => config.get("profile.#{profile}.full_if_older_than", false) || config['settings.full_if_older_than'],
@@ -125,6 +121,7 @@ module S3TarBackup
         :remove_all_but_n_full => config.get("profile.#{profile}.remove_all_but_n_full", false) || config.get('settings.remove_all_but_n_full', false),
         :compression => (config.get("profile.#{profile}.compression", false) || config.get('settings.compression', 'bzip2')).to_sym,
         :always_full => config.get('settings.always_full', false) || config.get("profile.#{profile}.always_full", false),
+        :backend => create_backend(config,config.get("profile.#{profile}.dest", false) || config['settings.dest']),
       }
       backup_config
     end
@@ -174,12 +171,12 @@ module S3TarBackup
         puts "Removing #{remove.count} old backup files"
       end
       remove.each do |object|
-        @s3.buckets[backup_config[:bucket]].objects["#{backup_config[:dest_prefix]}/#{object[:name]}"].delete
+        backup_config[:backend].remove_item(object[:name])
       end
     end
 
     # Config should have the keys
-    # backup_dir, name, soruces, exclude, bucket, dest_prefix
+    # backup_dir, name, soruces, exclude
     def backup_incr(config, verbose=false)
       puts "Starting new incremental backup"
       backup = Backup.new(config[:backup_dir], config[:name], config[:sources], config[:exclude], config[:compression], config[:encryption])
@@ -187,15 +184,9 @@ module S3TarBackup
       # Try and get hold of the snar file
       unless backup.snar_exists?
         puts "Failed to find snar file. Attempting to download..."
-        s3_snar = "#{config[:dest_prefix]}/#{backup.snar}"
-        object = @s3.buckets[config[:bucket]].objects[s3_snar]
-        if object.exists?
+        if config[:backend].item_exists?(backup.snar)
           puts "Found file on S3. Downloading"
-          open(backup.snar_path, 'wb') do |f|
-            object.read do |chunk|
-              f.write(chunk)
-            end
-          end
+          config[:backend].download_item(backup.snar, backup.snar_path)
         else
           puts "Failed to download snar file. Defaulting to full backup"
         end
@@ -214,18 +205,18 @@ module S3TarBackup
 
     def backup(config, backup, verbose=false)
       exec(backup.backup_cmd(verbose))
-      puts "Uploading #{config[:bucket]}/#{config[:dest_prefix]}/#{File.basename(backup.archive)} (#{bytes_to_human(File.size(backup.archive))})"
-      upload(backup.archive, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.archive)}")
+      puts "Uploading #{config[:backend].prefix}/#{File.basename(backup.archive)} (#{bytes_to_human(File.size(backup.archive))})"
+      upload(config[:backend], backup.archive, File.basename(backup.archive))
       puts "Uploading snar (#{bytes_to_human(File.size(backup.snar_path))})"
-      upload(backup.snar_path, config[:bucket], "#{config[:dest_prefix]}/#{File.basename(backup.snar)}")
+      upload(config[:backend], backup.snar_path, File.basename(backup.snar))
       File.delete(backup.archive)
     end
 
-    def upload(source, bucket, dest_name)
+    def upload(backend, source, dest_name)
       tries = 0
       begin
-        @s3.buckets[bucket].objects.create(dest_name, Pathname.new(source))
-      rescue Errno::ECONNRESET => e
+        backend.upload_item(dest_name, source)
+      rescue UploadItemFailedError => e
         tries += 1
         if tries <= UPLOAD_TRIES
           puts "Upload Exception: #{e}"
@@ -262,13 +253,9 @@ module S3TarBackup
       raise "Destination dir is not a directory" unless File.directory?(restore_dir)
 
       prev_backups[restore_start_index..restore_end_index].each do |object|
-        puts "Fetching #{backup_config[:bucket]}/#{backup_config[:dest_prefix]}/#{object[:name]} (#{bytes_to_human(object[:size])})"
+        puts "Fetching #{backup_config[:backend].prefix}/#{object[:name]} (#{bytes_to_human(object[:size])})"
         dl_file = "#{backup_config[:backup_dir]}/#{object[:name]}"
-        open(dl_file, 'wb') do |f|
-          @s3.buckets[backup_config[:bucket]].objects["#{backup_config[:dest_prefix]}/#{object[:name]}"].read do |chunk|
-            f.write(chunk)
-          end
-        end
+        backup_config[:backend].download_item(object[:name], dl_file)
         puts "Extracting..."
         exec(Backup.restore_cmd(restore_dir, dl_file, opts[:verbose], opts[:password_file] || backup_config[:password_file]))
         File.delete(dl_file)
@@ -310,8 +297,8 @@ module S3TarBackup
       puts "\n"
     end
 
-    def get_objects(bucket, prefix, profile)
-      objects = @s3.buckets[bucket].objects.with_prefix(prefix).map do |object|
+    def get_objects(config, profile)
+      objects = config[:backend].list_items.map do |object|
         Backup.parse_object(object, profile)
       end
       objects.compact.sort_by{ |o| o[:date] }
