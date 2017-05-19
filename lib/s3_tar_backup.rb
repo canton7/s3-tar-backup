@@ -3,6 +3,7 @@ require 's3_tar_backup/ini_parser'
 require 's3_tar_backup/backup'
 require 's3_tar_backup/version'
 require 's3_tar_backup/backend/s3_backend'
+require 's3_tar_backup/backend/file_backend'
 
 module S3TarBackup
   class Main
@@ -55,7 +56,7 @@ module S3TarBackup
           prefix = config.get('settings.dest', false) || config["profile.#{profiles[0]}.dest"]
           puts "Uploading #{opts[:config]} to #{prefix}/#{File.basename(opts[:config])}"
           backend = create_backend(config, prefix)
-          upload(backend, opts[:config], "#{prefix}/#{File.basename(opts[:config])}")
+          upload(backend, opts[:config], File.basename(opts[:config]))
           return
         end
 
@@ -80,12 +81,16 @@ module S3TarBackup
     end
 
     def create_backend(config, dest_prefix)
-        Backend::S3Backend.new(
-          ENV['AWS_ACCESS_KEY_ID'] || config['settings.aws_access_key_id'],
-          ENV['AWS_SECRET_ACCESS_KEY'] || config['settings.aws_secret_access_key'],
-          config.get('settings.aws_region', false),
-          config.get('settings.dest', false) || config["profile.#{profiles[0]}.dest"]
-        )
+        if dest_prefix.start_with?('file://')
+          Backend::FileBackend.new(dest_prefix['file://'.length..-1])
+        else
+          Backend::S3Backend.new(
+            ENV['AWS_ACCESS_KEY_ID'] || config['settings.aws_access_key_id'],
+            ENV['AWS_SECRET_ACCESS_KEY'] || config['settings.aws_secret_access_key'],
+            config.get('settings.aws_region', false),
+            (config.get('settings.dest', false) || config["profile.#{profiles[0]}.dest"]).sub(%r{^s3://}, '')
+          )
+        end
     end
 
     def gen_backup_config(profile, config)
@@ -216,7 +221,7 @@ module S3TarBackup
       tries = 0
       begin
         backend.upload_item(dest_name, source)
-      rescue UploadItemFailedError => e
+      rescue Backend::UploadItemFailedError => e
         tries += 1
         if tries <= UPLOAD_TRIES
           puts "Upload Exception: #{e}"
