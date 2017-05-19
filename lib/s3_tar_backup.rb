@@ -79,7 +79,7 @@ module S3TarBackup
     end
 
     def absolute_path_from_config_file(config, path)
-      File.expand_path(File.join(File.absolute_path(File.dirname(config.file_path)), path))
+      File.expand_path(File.join(File.expand_path(File.dirname(config.file_path)), path))
     end
 
     def create_backend(config, dest_prefix)
