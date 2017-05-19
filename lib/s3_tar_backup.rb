@@ -334,7 +334,8 @@ module S3TarBackup
         n /= 1024.0
         count += 1
       end
-      format("%.2f", n) << %w(B KB MB GB TB)[count]
+      fmt = (count == 0) ? '%i' : '%.2f'
+      format(fmt, n) << %w(B KB MB GB TB)[count]
     end
 
     def exec(cmd)
