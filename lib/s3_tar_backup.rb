@@ -126,7 +126,7 @@ module S3TarBackup
         :full_if_older_than => config.get("profile.#{profile}.full_if_older_than", false) || config['settings.full_if_older_than'],
         :remove_older_than => config.get("profile.#{profile}.remove_older_than", false) || config.get('settings.remove_older_than', false),
         :remove_all_but_n_full => config.get("profile.#{profile}.remove_all_but_n_full", false) || config.get('settings.remove_all_but_n_full', false),
-        :compression => (config.get("profile.#{profile}.compression", false) || config.get('settings.compression', 'bzip2')).to_sym,
+        :compression => (config.get("profile.#{profile}.compression", false) || config.get('settings.compression', 'none')).to_sym,
         :always_full => config.get('settings.always_full', false) || config.get("profile.#{profile}.always_full", false),
         :backend => create_backend(config,config.get("profile.#{profile}.dest", false) || config['settings.dest']),
       }
@@ -272,7 +272,7 @@ module S3TarBackup
     def perform_list_backups(prev_backups, backup_config)
       # prev_backups alreays contains just the files for the current profile
       puts "===== Backups list for #{backup_config[:name]} ====="
-      puts "Type: N:  Date:#{' '*18}Size:       Chain Size:   Format:   Encryption:\n\n"
+      puts "Type: N:  Date:#{' '*18}Size:       Chain Size:   Compression:   Encryption:\n\n"
       prev_type = ''
       total_size = 0
       chain_length = 0
@@ -296,7 +296,7 @@ module S3TarBackup
           'None'
         end
         puts "#{type}  #{chain_length_str} #{object[:date].strftime('%F %T')}    #{bytes_to_human(object[:size]).ljust(8)}    " \
-          "#{chain_cum_size_str}      #{object[:compression].to_s.ljust(7)}   #{encryption}"
+          "#{chain_cum_size_str}      #{object[:compression].to_s.ljust(12)}   #{encryption}"
         total_size += object[:size]
       end
       puts "\n"

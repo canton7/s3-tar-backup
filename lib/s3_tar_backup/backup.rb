@@ -14,6 +14,7 @@ module S3TarBackup
     @encryption
 
     COMPRESSIONS = {
+      :none => {:flag => '', :ext => 'tar'},
       :gzip => {:flag => '-z', :ext => 'tar.gz'},
       :bzip2 => {:flag => '-j', :ext => 'tar.bz2'},
       :lzma => {:flag => '--lzma', :ext => 'tar.lzma'},
