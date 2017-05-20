@@ -85,6 +85,8 @@ module S3TarBackup
     def create_backend(config, dest_prefix)
         if dest_prefix.start_with?('file://')
           Backend::FileBackend.new(dest_prefix['file://'.length..-1])
+        elsif dest_prefix.start_with?('/')
+          Backend::FileBackend.new(dest_prefix)
         else
           Backend::S3Backend.new(
             ENV['AWS_ACCESS_KEY_ID'] || config['settings.aws_access_key_id'],
