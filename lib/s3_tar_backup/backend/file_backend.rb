@@ -28,10 +28,14 @@ module S3TarBackup::Backend
       FileUtils.cp(File.join(@prefix, relative_path), local_path)
     end
 
-    def upload_item(relative_path, local_path)
+    def upload_item(relative_path, local_path, remove_original)
       path = File.join(@prefix, relative_path)
       FileUtils.mkdir_p(File.dirname(path)) unless File.directory?(File.dirname(path))
-      FileUtils.cp(local_path, path)
+      if remove_original
+        FileUtils.mv(local_path, path)
+      else
+        FileUtils.cp(local_path, path)
+      end
     end
 
     def list_items(relative_path='')

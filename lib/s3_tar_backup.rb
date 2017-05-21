@@ -58,7 +58,7 @@ module S3TarBackup
           prefix = config.get('settings.dest', false) || config["profile.#{profiles[0]}.dest"]
           puts "Uploading #{config_file} to #{prefix}/#{File.basename(config_file)}"
           backend = create_backend(config, prefix)
-          upload(backend, config_file, File.basename(config_file))
+          upload(backend, config_file, File.basename(config_file), false)
           return
         end
 
@@ -215,16 +215,15 @@ module S3TarBackup
     def backup(config, backup, verbose=false)
       exec(backup.backup_cmd(verbose))
       puts "Uploading #{config[:backend].prefix}/#{File.basename(backup.archive)} (#{bytes_to_human(File.size(backup.archive))})"
-      upload(config[:backend], backup.archive, File.basename(backup.archive))
+      upload(config[:backend], backup.archive, File.basename(backup.archive), true)
       puts "Uploading snar (#{bytes_to_human(File.size(backup.snar_path))})"
-      upload(config[:backend], backup.snar_path, File.basename(backup.snar))
-      File.delete(backup.archive)
+      upload(config[:backend], backup.snar_path, File.basename(backup.snar), false)
     end
 
-    def upload(backend, source, dest_name)
+    def upload(backend, source, dest_name, remove_original)
       tries = 0
       begin
-        backend.upload_item(dest_name, source)
+        backend.upload_item(dest_name, source, remove_original)
       rescue Backend::UploadItemFailedError => e
         tries += 1
         if tries <= UPLOAD_TRIES

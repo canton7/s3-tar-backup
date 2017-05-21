@@ -39,9 +39,10 @@ module S3TarBackup::Backend
       end
     end
 
-    def upload_item(relative_path, local_path)
+    def upload_item(relative_path, local_path, remove_original)
       bucket, path = parse_bucket_object("#{@prefix}/#{relative_path}")
       @s3.buckets[bucket].objects.create(path, Pathname.new(local_path))
+      File.delete(local_path) if remove_original
     rescue Errno::ECONNRESET => e
       raise UploadItemFailedError.new, e.message
     end
