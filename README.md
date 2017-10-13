@@ -236,7 +236,7 @@ You can also specify multiple profiles.
 
 If no profile is specified, all profiles are backed up.
 
-`--full` will force s3-tar-backup to do a full backup (instead of an incremental one), regardless of which it thinks it should do based on your cofnig file.
+`--full` will force s3-tar-backup to do a full backup (instead of an incremental one), regardless of which it thinks it should do based on your config file.
 
 `--verbose` will get tar to list the files that it is backing up.
 
