@@ -52,6 +52,10 @@ module S3TarBackup
       File.join(@backup_dir, snar)
     end
 
+    def tmp_snar_path
+      snar_path + '.tmp'
+    end
+
     def snar_exists?
       File.exists?(snar_path)
     end
@@ -74,7 +78,7 @@ module S3TarBackup
       when :password_file
         " | gpg -c --passphrase-file \"#{@encryption[:password_file]}\" --cipher-algo #{PASSPHRASE_CIPHER_ALGO} -o \"#{@archive}\" --batch --yes --no-tty"
       end
-      "tar c#{verbose ? 'v' : ''}#{tar_archive} #{@compression_flag} -g \"#{snar_path}\"#{exclude} --no-check-device #{sources}#{gpg_cmd}"
+      "tar c#{verbose ? 'v' : ''}#{tar_archive} #{@compression_flag} -g \"#{tmp_snar_path}\"#{exclude} --no-check-device #{sources}#{gpg_cmd}"
     end
 
     def self.parse_object(object, profile)

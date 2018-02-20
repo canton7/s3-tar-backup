@@ -213,9 +213,12 @@ module S3TarBackup
     end
 
     def backup(config, backup, verbose=false)
+      FileUtils.rm(backup.tmp_snar_path) if File.exists?(backup.tmp_snar_path)
+      FileUtils.cp(backup.snar_path, backup.tmp_snar_path) if backup.snar_exists?
       exec(backup.backup_cmd(verbose))
       puts "Uploading #{config[:backend].prefix}/#{File.basename(backup.archive)} (#{bytes_to_human(File.size(backup.archive))})"
       upload(config[:backend], backup.archive, File.basename(backup.archive), true)
+      FileUtils.mv(backup.tmp_snar_path, backup.snar_path, :force => true)
       puts "Uploading snar (#{bytes_to_human(File.size(backup.snar_path))})"
       upload(config[:backend], backup.snar_path, File.basename(backup.snar), false)
     end
